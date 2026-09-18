@@ -1,26 +1,216 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --dd-green: #024d43;
+  --dd-green-deep: #013a33;
+  /* Matches hero sky tint so overscroll / edge gaps never flash flat brand green */
+  --dd-hero-base: #012e28;
+  --dd-gold: #c5a059;
+  --dd-cream: #f3eee4;
+  --dd-ink: #021f1c;
+  --background: var(--dd-hero-base);
+  --foreground: var(--dd-cream);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-sans);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  /* `smooth` fights ScrollTrigger scrub and causes reveal glitches */
+  scroll-behavior: auto;
+  background: var(--dd-hero-base);
+  overscroll-behavior-y: none;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--dd-hero-base);
+  color: var(--dd-cream);
+  font-family: var(--font-body), Georgia, serif;
+  overscroll-behavior-y: none;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--dd-gold) 55%, transparent);
+  color: var(--dd-green-deep);
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.85) sepia(0.4) saturate(2) hue-rotate(5deg);
+  opacity: 0.7;
+}
+
+/* Hero green atmosphere — mottled “sky” (pinned) + palm shadows (animated) */
+.dd-hero-atmosphere {
+  background: var(--dd-hero-base);
+  overflow: hidden;
+  /* Confines the palm's `multiply` to this layer. Without it the blend would
+     reach whatever sits below in the parent stacking context. */
+  isolation: isolate;
+}
+
+/**
+ * The arch window onto the hero photo, in its closed resting state.
+ *
+ * `inset()` with rounded top corners is exactly an arch, and it is the most
+ * broadly supported clip primitive there is — no even-odd hole for Safari or
+ * mobile to rasterise differently.
+ *
+ * This value is the arch at rest, expressed in pure CSS so it ships in the
+ * server-rendered HTML and is already correct on the very first paint. That is
+ * what removes the flash of bare background before the arch appeared.
+ * Once hydrated, the scroll handler overrides `clip-path` inline.
+ */
+.dd-hero-arch {
+  --arch-w: clamp(280px, 42vw, 460px);
+
+  clip-path: inset(
+    5% calc(50% - var(--arch-w) / 2) 5% calc(50% - var(--arch-w) / 2) round
+      min(var(--arch-w) / 2, 31.5vh) min(var(--arch-w) / 2, 31.5vh) 0px 0px
+  );
+}
+
+.dd-hero-sky {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 55% at 15% 20%, rgba(0, 0, 0, 0.45) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 50% at 85% 15%, rgba(0, 0, 0, 0.35) 0%, transparent 50%),
+    radial-gradient(ellipse 90% 60% at 70% 80%, rgba(0, 0, 0, 0.4) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 40% 60%, rgba(0, 0, 0, 0.25) 0%, transparent 50%),
+    radial-gradient(ellipse 100% 80% at 50% 0%, rgba(1, 35, 30, 0.9) 0%, transparent 60%),
+    linear-gradient(165deg, #01352e 0%, #014038 40%, var(--dd-hero-base) 100%);
+  opacity: 1;
+}
+
+.dd-hero-palms {
+  /* Must stay positioned: the palm uses next/image `fill`, so without this it
+     resolves its containing block to the wall instead of this box, and snaps
+     the moment a scroll transform appears. */
+  position: absolute;
+  left: -4%;
+  top: -2%;
+  width: min(52vw, 560px);
+  height: 108%;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  transform-origin: left center;
+  backface-visibility: hidden;
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    background: var(--dd-hero-base);
+    color: var(--dd-cream);
+  }
 }

@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Deccan Dwell
 
-## Getting Started
+Premium animated hotel site for **Deccan Dwell**, Mysuru — with live room availability and Razorpay-ready booking holds.
 
-First, run the development server:
+## Run
 
 ```bash
+cd deccan-dwell
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Features
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Hero “camera into the arch”
+Scroll the first section: the arched Mysuru window scales up like a push-in shot; chrome (logo, nav, side copy) fades away until the photo fills the frame.
 
-## Learn More
+### Room availability (free local stack)
+- `GET /api/availability?checkIn=YYYY-MM-DD&checkOut=YYYY-MM-DD`
+- Inventory in `src/lib/inventory.ts` (in-memory; swap for Supabase later)
+- Rooms UI shows **X left** / **All booked**
+- Booking creates a **15-minute pending hold**, then confirm via payment
 
-To learn more about Next.js, take a look at the following resources:
+### Booking + Razorpay path
+1. `POST /api/bookings` → pending hold + amount
+2. Create Razorpay order (amount in paise) — wire `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`
+3. On success: `PATCH /api/bookings` with `{ bookingId, paymentId }`
+4. Prefer Razorpay **webhooks** in production
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Demo: use **Demo: Confirm Payment** on the Book section (no gateway keys needed).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Schema (for Supabase / Postgres later)
 
-## Deploy on Vercel
+```sql
+create table room_types (
+  id text primary key,
+  name text not null,
+  slug text unique not null,
+  total_units int not null,
+  base_price_inr int not null
+);
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+create table bookings (
+  id text primary key,
+  room_type_id text references room_types(id),
+  check_in date not null,
+  check_out date not null,
+  guests int not null,
+  guest_name text not null,
+  guest_email text not null,
+  guest_phone text not null,
+  status text not null, -- pending | confirmed | cancelled | expired
+  amount_inr int not null,
+  payment_id text,
+  hold_expires_at timestamptz,
+  created_at timestamptz default now()
+);
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Brand assets
+
+- Logo: `public/images/logo.jpg` (exact client logo)
+- Hero: `public/images/hero-mysuru.png`
