@@ -2,8 +2,8 @@ import Image from "next/image";
 
 const shots = [
   { src: "/images/hero-mysuru.png", alt: "Chamundi Hills view", span: "md:col-span-2 md:row-span-2" },
-  { src: "/images/room-deluxe.jpg", alt: "Deluxe room", span: "" },
-  { src: "/images/room-suite.jpg", alt: "Heritage suite", span: "" },
+  { src: "/images/room-deluxe.jpg", alt: "Premium Deluxe room", span: "" },
+  { src: "/images/room-suite.jpg", alt: "3 BHK suite", span: "" },
 ];
 
 export function GallerySection() {

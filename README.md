@@ -17,19 +17,36 @@ Open [http://localhost:3000](http://localhost:3000).
 ### Hero “camera into the arch”
 Scroll the first section: the arched Mysuru window scales up like a push-in shot; chrome (logo, nav, side copy) fades away until the photo fills the frame.
 
-### Room availability (free local stack)
+### Room availability
+- SQLite database at `prisma/dev.db` (swap `DATABASE_URL` to Postgres/Supabase later)
+- Each booking writes one row per occupied night, so the calendar can show **how many rooms are left on each day**
+- `GET /api/availability?month=YYYY-MM&roomTypeId=rt_deluxe`
 - `GET /api/availability?checkIn=YYYY-MM-DD&checkOut=YYYY-MM-DD`
-- Inventory in `src/lib/inventory.ts` (in-memory; swap for Supabase later)
-- Rooms UI shows **X left** / **All booked**
-- Booking creates a **15-minute pending hold**, then confirm via payment
+- Pending holds last 15 minutes, then those nights free up again
 
-### Booking + Razorpay path
-1. `POST /api/bookings` → pending hold + amount
-2. Create Razorpay order (amount in paise) — wire `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`
-3. On success: `PATCH /api/bookings` with `{ bookingId, paymentId }`
-4. Prefer Razorpay **webhooks** in production
+### Booking + Razorpay
+1. Guest picks dates on the calendar and pays on the site
+2. `POST /api/bookings` holds the nights and creates a Razorpay order
+3. Razorpay Checkout opens in the page
+4. `POST /api/payments/verify` checks the signature and confirms the stay
+5. Production: Razorpay webhook `POST /api/webhooks/razorpay` (`payment.captured`)
 
-Demo: use **Demo: Confirm Payment** on the Book section (no gateway keys needed).
+Add keys to `.env.local` (see `.env.example`):
+
+```bash
+RAZORPAY_KEY_ID=rzp_test_...
+RAZORPAY_KEY_SECRET=...
+NEXT_PUBLIC_RAZORPAY_KEY_ID=rzp_test_...
+RAZORPAY_WEBHOOK_SECRET=...
+```
+
+Then:
+
+```bash
+npx prisma db push
+npm run db:seed
+npm run dev
+```
 
 ## Schema (for Supabase / Postgres later)
 
@@ -51,11 +68,19 @@ create table bookings (
   guest_name text not null,
   guest_email text not null,
   guest_phone text not null,
-  status text not null, -- pending | confirmed | cancelled | expired
+  status text not null,
   amount_inr int not null,
   payment_id text,
+  razorpay_order_id text unique,
   hold_expires_at timestamptz,
   created_at timestamptz default now()
+);
+
+create table booking_nights (
+  id text primary key,
+  booking_id text references bookings(id) on delete cascade,
+  room_type_id text references room_types(id),
+  night date not null
 );
 ```
 

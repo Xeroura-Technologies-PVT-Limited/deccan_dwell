@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Cormorant_Garamond, DM_Sans, Great_Vibes, Geist } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
+import { IntroSplash } from "@/components/IntroSplash";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -41,7 +42,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={cn("h-full", "antialiased", display.variable, nav.variable, body.variable, script.variable, "font-sans", geist.variable)}
     >
-      <body className="min-h-full">{children}</body>
+      <head>
+        <link rel="preload" as="image" href="/images/logo.png" />
+      </head>
+      <body className="min-h-full">
+        <IntroSplash />
+        {children}
+      </body>
     </html>
   );
 }

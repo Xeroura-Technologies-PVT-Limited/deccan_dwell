@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { addDays, format } from "date-fns";
 import type { AvailabilityResult, RoomType } from "@/lib/types";
 import { ROOM_TYPES } from "@/lib/inventory-client";
+import { CHECK_IN_TIME, CHECK_OUT_TIME, OCCUPANCY_WINDOW } from "@/lib/hotel";
 
 function todayISO() {
   return format(new Date(), "yyyy-MM-dd");
@@ -70,13 +71,14 @@ export function RoomsSection() {
         </h2>
         <p className="mt-4 max-w-lg font-[family-name:var(--font-body)] text-base text-[var(--dd-cream)]/75">
           Live availability updates as guests book. Pick your dates to see how
-          many rooms remain — or if a category is sold out.
+          many rooms remain for the stay — or open the booking calendar to see
+          remaining rooms on each day.
         </p>
 
         <div className="mt-10 flex flex-wrap items-end gap-4 border-b border-[var(--dd-gold)]/25 pb-8">
           <label className="flex flex-col gap-2">
             <span className="font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.2em] text-[var(--dd-gold)]">
-              Check in
+              Check in · {CHECK_IN_TIME}
             </span>
             <input
               type="date"
@@ -95,7 +97,7 @@ export function RoomsSection() {
           </label>
           <label className="flex flex-col gap-2">
             <span className="font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.2em] text-[var(--dd-gold)]">
-              Check out
+              Check out · {CHECK_OUT_TIME}
             </span>
             <input
               type="date"
@@ -113,10 +115,41 @@ export function RoomsSection() {
           {error && (
             <span className="text-sm text-red-300">{error}</span>
           )}
+          <p className="w-full font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.18em] text-[var(--dd-cream)]/45">
+            {OCCUPANCY_WINDOW}
+          </p>
         </div>
 
-        <div className="mt-12 grid gap-14 md:grid-cols-2">
-          {ROOM_TYPES.map((room) => (
+        <h3 className="mt-12 font-[family-name:var(--font-display)] text-3xl text-[var(--dd-cream)] md:text-4xl">
+          Rooms
+        </h3>
+        <p className="mt-3 max-w-lg font-[family-name:var(--font-body)] text-sm text-[var(--dd-cream)]/70">
+          Executive, Premium, and Premium Deluxe — three of each, double occupancy.
+          Extra bed ₹500 / night.
+        </p>
+        <div className="mt-10 grid gap-14 md:grid-cols-3">
+          {ROOM_TYPES.filter((room) => room.kind === "room").map((room) => (
+            <RoomCard
+              key={room.id}
+              room={room}
+              availability={byId.get(room.id)}
+              checkIn={checkIn}
+              checkOut={checkOut}
+            />
+          ))}
+        </div>
+
+        <h3
+          id="suites"
+          className="mt-20 font-[family-name:var(--font-display)] text-3xl text-[var(--dd-cream)] md:text-4xl"
+        >
+          Suites
+        </h3>
+        <p className="mt-3 max-w-lg font-[family-name:var(--font-body)] text-sm text-[var(--dd-cream)]/70">
+          Three 3 BHK suites — ground, first, and second floor. Two of each.
+        </p>
+        <div className="mt-10 grid gap-14 md:grid-cols-3">
+          {ROOM_TYPES.filter((room) => room.kind === "suite").map((room) => (
             <RoomCard
               key={room.id}
               room={room}
@@ -162,7 +195,10 @@ function RoomCard({
               {room.name}
             </h3>
             <p className="mt-1 font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.2em] text-white/70">
-              From ₹{room.basePriceInr.toLocaleString("en-IN")} / night
+              {room.subtitle}
+            </p>
+            <p className="mt-1 font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.2em] text-white/70">
+              ₹{room.basePriceInr.toLocaleString("en-IN")} / night · {room.occupancy} occupancy
             </p>
           </div>
           <AvailabilityBadge soldOut={soldOut} left={left} total={room.totalUnits} />

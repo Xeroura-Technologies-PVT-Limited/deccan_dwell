@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model RoomType {
+  id           String         @id
+  name         String
+  slug         String         @unique
+  description  String
+  amenities    String
+  totalUnits   Int
+  basePriceInr Int
+  image        String
+  bookings     Booking[]
+  nights       BookingNight[]
+}
+
+model User {
+  id           String    @id
+  email        String    @unique
+  passwordHash String
+  name         String
+  phone        String    @default("")
+  role         String
+  createdAt    String
+  bookings     Booking[]
+}
+
+model Booking {
+  id              String         @id
+  roomTypeId      String
+  roomType        RoomType       @relation(fields: [roomTypeId], references: [id])
+  userId          String?
+  user            User?          @relation(fields: [userId], references: [id])
+  checkIn         String
+  checkOut        String
+  guests          Int
+  guestName       String
+  guestEmail      String
+  guestPhone      String
+  status          String
+  amountInr       Int
+  paymentId       String?
+  paymentMethod   String         @default("online")
+  depositInr      Int            @default(0)
+  razorpayOrderId String?        @unique
+  holdExpiresAt   String?
+  createdAt       String
+  nights          BookingNight[]
+
+  @@index([roomTypeId, status])
+  @@index([guestEmail])
+  @@index([userId])
+}
+
+/// One row per occupied night. Calendar remaining = totalUnits − count(active nights).
+model BookingNight {
+  id         String   @id
+  bookingId  String
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  roomTypeId String
+  roomType   RoomType @relation(fields: [roomTypeId], references: [id])
+  night      String
+
+  @@index([roomTypeId, night])
+  @@index([bookingId])
+}

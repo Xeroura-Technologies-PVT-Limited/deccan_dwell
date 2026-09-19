@@ -1,3 +1,5 @@
+import { HOTEL } from "@/lib/hotel";
+
 export function ContactSection() {
   return (
     <section
@@ -13,28 +15,25 @@ export function ContactSection() {
             Visit Deccan Dwell
           </h2>
           <p className="mt-4 max-w-md font-[family-name:var(--font-body)] text-[var(--dd-cream)]/70">
-            Mysuru, Karnataka — at the foothills of Chamundi Hills.
-            <br />
-            Home away from home.
+            {HOTEL.address}
           </p>
         </div>
         <div className="space-y-3 font-[family-name:var(--font-body)] text-sm text-[var(--dd-cream)]/80">
           <p>
             <a
-              href="mailto:stay@deccandwell.com"
+              href={`mailto:${HOTEL.email}`}
               className="transition hover:text-[var(--dd-gold)]"
             >
-              stay@deccandwell.com
+              {HOTEL.email}
             </a>
           </p>
-          <p>
-            <a href="tel:+919999999999" className="transition hover:text-[var(--dd-gold)]">
-              +91 99999 99999
-            </a>
-          </p>
-          <p className="font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.2em] text-[var(--dd-gold)]">
-            Replace with client details
-          </p>
+          {HOTEL.phones.map((phone) => (
+            <p key={phone.href}>
+              <a href={phone.href} className="transition hover:text-[var(--dd-gold)]">
+                {phone.label}
+              </a>
+            </p>
+          ))}
         </div>
       </div>
     </section>

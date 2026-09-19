@@ -7,7 +7,11 @@ import {
   useTransform,
   type MotionValue,
 } from "framer-motion";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { MysuruStory } from "./MysuruStory";
+import { HotelTell } from "./HotelTell";
+import { MysuruVisit } from "./MysuruVisit";
+import { ProfileMenu } from "./ProfileMenu";
 
 function IconInstagram({ size = 16 }: { size?: number }) {
   return (
@@ -39,7 +43,7 @@ function IconPin({ size = 16 }: { size?: number }) {
 const NAV = [
   { label: "Home", href: "#home" },
   { label: "Rooms", href: "#rooms" },
-  { label: "Suites", href: "#rooms" },
+  { label: "Suites", href: "#suites" },
   { label: "Experience", href: "#experience" },
   { label: "Gallery", href: "#gallery" },
   { label: "Contact", href: "#contact" },
@@ -71,7 +75,7 @@ const STACK_CARDS: StackCard[] = [
   {
     id: "deluxe",
     image: "/images/room-deluxe.jpg",
-    alt: "Deluxe room",
+    alt: "Premium Deluxe room",
   },
   {
     id: "suite",
@@ -82,15 +86,36 @@ const STACK_CARDS: StackCard[] = [
 
 const STACK_SEGMENTS = STACK_CARDS.length - 1;
 
-/** Arch has fully passed the camera; the card stack takes over. */
-const PORTAL_END = 0.24;
-
 /**
- * Beat between the arch finishing and the stack starting. Without it the first
- * card begins moving on the same frame the arch clears, so scrolling back reads
- * as the photo never having settled into the arch at all.
+ * Hero phases are authored in viewport-heights of *scroll*, then converted to
+ * 0–1 progress. That way inserting the Mysuru polaroid story does not speed
+ * up the arch or the card stack.
+ *
+ * The original 500vh section had a 400vh scroll range (offset end-start).
  */
-const STACK_START = 0.32;
+const BASE_SCROLL_VH = 400;
+const PORTAL_SCROLL_VH = 0.24 * BASE_SCROLL_VH;
+const STACK_SCROLL_VH = (1 - 0.32) * BASE_SCROLL_VH;
+const VISIT_SCROLL_VH = 240;
+const TELL_SCROLL_VH = 320;
+const STORY_SCROLL_VH = 280;
+const SCROLL_VH =
+  PORTAL_SCROLL_VH + VISIT_SCROLL_VH + TELL_SCROLL_VH + STORY_SCROLL_VH + STACK_SCROLL_VH;
+const SECTION_VH = SCROLL_VH + 100;
+
+const at = (oldProgress: number) => (oldProgress * BASE_SCROLL_VH) / SCROLL_VH;
+
+/** Arch has fully passed the camera. */
+const PORTAL_END = at(0.24);
+const VISIT_START = PORTAL_END;
+const VISIT_END = (PORTAL_SCROLL_VH + VISIT_SCROLL_VH) / SCROLL_VH;
+const TELL_START = VISIT_END;
+const TELL_END = (PORTAL_SCROLL_VH + VISIT_SCROLL_VH + TELL_SCROLL_VH) / SCROLL_VH;
+const STORY_START = TELL_END;
+const STORY_END =
+  (PORTAL_SCROLL_VH + VISIT_SCROLL_VH + TELL_SCROLL_VH + STORY_SCROLL_VH) / SCROLL_VH;
+/** Card stack begins after the polaroid map has settled. */
+const STACK_START = STORY_END;
 
 /**
  * Camera depth for the title. translateZ must stay safely under this: at
@@ -99,7 +124,7 @@ const STACK_START = 0.32;
  */
 const PERSPECTIVE = 1000;
 /** Scroll progress at which the title has fully passed the camera. */
-const TITLE_PASS = 0.16;
+const TITLE_PASS = at(0.16);
 /**
  * Apparent size is PERSPECTIVE / (PERSPECTIVE - z), so ramping z linearly gives
  * the hyperbolic blow-up of a real fly-past. Stopping just short of PERSPECTIVE
@@ -194,7 +219,10 @@ export function HeroPortal() {
   const sideLeftRef = useRef<HTMLDivElement>(null);
   const sideRightRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLDivElement>(null);
+  const bookCtaRef = useRef<HTMLDivElement>(null);
+  const bookBtnRef = useRef<HTMLAnchorElement>(null);
   const exploreRef = useRef<HTMLDivElement>(null);
+  const storyRef = useRef<HTMLDivElement>(null);
   const [origin, setOrigin] = useState({ x: 50, y: 42 });
   const [box, setBox] = useState({ w: 0, h: 0 });
 
@@ -214,9 +242,21 @@ export function HeroPortal() {
   }, []);
 
   useEffect(() => {
-    STACK_CARDS.forEach((card) => {
+    const extras = [
+      "/images/places/palace.jpg",
+      "/images/places/chamundi.jpg",
+      "/images/places/cathedral.jpg",
+      "/images/places/zoo.jpg",
+      "/images/places/jaganmohan.jpg",
+      "/images/places/brindavan.jpg",
+      "/images/building-exterior-hd.jpg",
+      "/images/entrance-stairs-hd.jpg",
+      "/images/story/bedroom.jpg",
+      "/images/story/suite.jpg",
+    ];
+    [...STACK_CARDS.map((card) => card.image), ...extras].forEach((src) => {
       const img = new window.Image();
-      img.src = card.image;
+      img.src = src;
       void img.decode?.().catch(() => undefined);
     });
   }, []);
@@ -229,12 +269,12 @@ export function HeroPortal() {
   /** Gentle push-in. Small enough that the photo never softens. */
   const photoPush = useTransform(openness, [0, 1], [1.06, 1]);
 
-  const chromeY = useTransform(scrollYProgress, [0, 0.04, 0.1], [0, -8, -140]);
-  const chromeOpacity = useTransform(scrollYProgress, [0, 0.04, 0.1], [1, 1, 0]);
+  const chromeY = useTransform(scrollYProgress, [0, at(0.04), at(0.1)], [0, -8, -140]);
+  const chromeOpacity = useTransform(scrollYProgress, [0, at(0.04), at(0.1)], [1, 1, 0]);
 
-  const palmsOpacity = useTransform(scrollYProgress, [0, 0.06, 0.12], [1, 1, 0]);
-  const palmsX = useTransform(scrollYProgress, [0, 0.18], [0, -980]);
-  const palmsScale = useTransform(scrollYProgress, [0, 0.18], [1, 1.4]);
+  const palmsOpacity = useTransform(scrollYProgress, [0, at(0.06), at(0.12)], [1, 1, 0]);
+  const palmsX = useTransform(scrollYProgress, [0, at(0.18)], [0, -980]);
+  const palmsScale = useTransform(scrollYProgress, [0, at(0.18)], [1, 1.4]);
 
   /**
    * Title rushes toward the camera and passes behind us. It sits above the
@@ -265,9 +305,18 @@ export function HeroPortal() {
     [1, 1, 0, 0],
   );
 
-  const exploreOpacity = useTransform(scrollYProgress, [0, 0.05, 0.1], [1, 1, 0]);
+  const exploreOpacity = useTransform(scrollYProgress, [0, at(0.05), at(0.1)], [1, 1, 0]);
 
   const stackProgress = useTransform(scrollYProgress, [STACK_START, 1], [0, 1]);
+  const visitProgress = useTransform(scrollYProgress, [VISIT_START, VISIT_END], [0, 1]);
+  const tellProgress = useTransform(scrollYProgress, [TELL_START, TELL_END], [0, 1]);
+  const storyProgress = useTransform(scrollYProgress, [STORY_START, STORY_END], [0, 1]);
+  /** Polaroid overlays stay on card 0 after they assemble — they recede with it. */
+  const storyOpacity = useTransform(
+    scrollYProgress,
+    [VISIT_START, VISIT_START + 0.01, 1],
+    [0, 1, 1],
+  );
 
   /**
    * Scroll-driven fades, applied to the DOM by hand.
@@ -290,9 +339,11 @@ export function HeroPortal() {
         [sideLeftRef, sideOpacity],
         [sideRightRef, sideOpacity],
         [titleRef, titleOpacity],
+        [bookCtaRef, titleOpacity],
         [exploreRef, exploreOpacity],
+        [storyRef, storyOpacity],
       ] as const,
-    [chromeOpacity, palmsOpacity, sideOpacity, titleOpacity, exploreOpacity],
+    [chromeOpacity, palmsOpacity, sideOpacity, titleOpacity, exploreOpacity, storyOpacity],
   );
 
   // Drive the arch clip and the fades imperatively: no re-render per frame,
@@ -330,6 +381,13 @@ export function HeroPortal() {
         const next = value.get().toFixed(3);
         if (node.style.opacity !== next) {
           node.style.opacity = next;
+          if (ref === storyRef) {
+            node.style.visibility = Number(next) < 0.01 ? "hidden" : "visible";
+          }
+          if (ref === bookCtaRef) {
+            const btn = bookBtnRef.current;
+            if (btn) btn.style.pointerEvents = Number(next) < 0.2 ? "none" : "auto";
+          }
           changed = true;
         }
       }
@@ -351,6 +409,10 @@ export function HeroPortal() {
     wake();
 
     const unsubscribe = openness.on("change", wake);
+    const unsubscribeStory = storyProgress.on("change", wake);
+    const unsubscribeVisit = visitProgress.on("change", wake);
+    const unsubscribeTell = tellProgress.on("change", wake);
+    const unsubscribeScroll = scrollYProgress.on("change", wake);
     window.addEventListener("scroll", wake, { passive: true });
     window.addEventListener("scrollend", wake);
     window.addEventListener("resize", wake);
@@ -358,13 +420,17 @@ export function HeroPortal() {
 
     return () => {
       unsubscribe();
+      unsubscribeStory();
+      unsubscribeVisit();
+      unsubscribeTell();
+      unsubscribeScroll();
       window.removeEventListener("scroll", wake);
       window.removeEventListener("scrollend", wake);
       window.removeEventListener("resize", wake);
       document.removeEventListener("visibilitychange", wake);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [openness, box, fades]);
+  }, [openness, box, fades, storyProgress, visitProgress, tellProgress, scrollYProgress]);
 
   useEffect(() => {
     const measure = () => {
@@ -381,7 +447,7 @@ export function HeroPortal() {
       // getBoundingClientRect includes the ancestor fly-past transform, so this
       // is only meaningful while the title is still at rest.
       const nEl = nRef.current;
-      if (!nEl || scrollYProgress.get() > 0.02) return;
+      if (!nEl || scrollYProgress.get() > at(0.02)) return;
       const nBox = nEl.getBoundingClientRect();
       setOrigin({
         x: Math.min(62, Math.max(38, ((nBox.left + nBox.width / 2) / window.innerWidth) * 100)),
@@ -397,7 +463,7 @@ export function HeroPortal() {
     };
   }, [scrollYProgress]);
 
-  const sectionVh = 100 + STACK_SEGMENTS * 100;
+  const sectionVh = SECTION_VH;
 
   return (
     <section
@@ -449,7 +515,19 @@ export function HeroPortal() {
                 index={index}
                 segments={STACK_SEGMENTS}
                 progress={stackProgress}
-              />
+              >
+                {index === 0 ? (
+                  <div
+                    ref={storyRef}
+                    className="absolute inset-0 z-[1]"
+                    style={{ opacity: 0, visibility: "hidden" }}
+                  >
+                    <MysuruVisit progress={visitProgress} />
+                    <HotelTell progress={tellProgress} />
+                    <MysuruStory progress={storyProgress} />
+                  </div>
+                ) : null}
+              </StackCardLayer>
             ))}
           </motion.div>
         </div>
@@ -493,20 +571,8 @@ export function HeroPortal() {
             ))}
           </nav>
 
-          <div className="flex flex-col items-end gap-2 pt-1">
-            <a
-              href="#book"
-              className="border border-[var(--dd-gold)] px-4 py-2.5 font-[family-name:var(--font-nav)] text-[11px] uppercase tracking-[0.2em] text-[var(--dd-cream)] transition hover:bg-[var(--dd-gold)] hover:text-[var(--dd-green)]"
-            >
-              Book Your Stay
-            </a>
-            <button
-              type="button"
-              className="font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.18em] text-[var(--dd-cream)]/70"
-              aria-label="Language"
-            >
-              EN ▾
-            </button>
+          <div className="flex items-center pt-1">
+            <ProfileMenu />
           </div>
         </motion.header>
 
@@ -563,15 +629,28 @@ export function HeroPortal() {
           >
             <svg
               viewBox="0 0 900 280"
-              className="h-auto w-full overflow-visible drop-shadow-[0_2px_24px_rgba(0,0,0,0.45)]"
+              className="h-auto w-full overflow-visible"
               role="img"
               aria-label="Deccan Dwell — Mysuru — Home away from home"
             >
+              <defs>
+                <filter id="dd-title-pop" x="-40%" y="-50%" width="180%" height="220%">
+                  <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="blur" />
+                  <feOffset in="blur" dy="3" result="off" />
+                  <feFlood floodColor="#1a1814" floodOpacity="0.32" result="tint" />
+                  <feComposite in="tint" in2="off" operator="in" result="shadow" />
+                  <feMerge>
+                    <feMergeNode in="shadow" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
               <text
                 x="450"
                 y="48"
                 textAnchor="middle"
-                fill="rgba(255,255,255,0.92)"
+                fill="#c5a059"
+                filter="url(#dd-title-pop)"
                 style={{
                   fontFamily: "var(--font-nav), DM Sans, sans-serif",
                   fontSize: "24px",
@@ -584,7 +663,8 @@ export function HeroPortal() {
                 x="450"
                 y="155"
                 textAnchor="middle"
-                fill="#ffffff"
+                fill="#efe4c8"
+                filter="url(#dd-title-pop)"
                 style={{
                   fontFamily: "var(--font-display), Cormorant Garamond, serif",
                   fontSize: "118px",
@@ -602,7 +682,8 @@ export function HeroPortal() {
                 x="450"
                 y="235"
                 textAnchor="middle"
-                fill="rgba(255,255,255,0.85)"
+                fill="#c5a059"
+                filter="url(#dd-title-pop)"
                 style={{
                   fontFamily: "var(--font-nav), DM Sans, sans-serif",
                   fontSize: "20px",
@@ -612,6 +693,29 @@ export function HeroPortal() {
                 HOME AWAY FROM HOME
               </text>
             </svg>
+          </motion.div>
+          <motion.div
+            ref={bookCtaRef}
+            style={{
+              x: "-50%",
+              scale: titleScale,
+              z: titleZ,
+              transformStyle: "preserve-3d",
+              backfaceVisibility: "hidden",
+            }}
+            className="absolute bottom-[18%] left-1/2 origin-center will-change-transform md:bottom-[15%]"
+          >
+            <a
+              ref={bookBtnRef}
+              href="#book"
+              className="pointer-events-auto cursor-pointer whitespace-nowrap border border-[#c5a059] px-16 py-8 font-[family-name:var(--font-nav)] text-[42px] uppercase tracking-[0.28em] text-[#efe4c8] transition hover:bg-[#c5a059] hover:text-[#024d43]"
+              style={{
+                filter:
+                  "drop-shadow(0 3px 6px rgba(26,24,20,0.32)) drop-shadow(0 8px 18px rgba(26,24,20,0.2))",
+              }}
+            >
+              Book Your Stay
+            </a>
           </motion.div>
         </div>
 
@@ -663,11 +767,13 @@ function StackCardLayer({
   index,
   segments,
   progress,
+  children,
 }: {
   card: StackCard;
   index: number;
   segments: number;
   progress: MotionValue<number>;
+  children?: ReactNode;
 }) {
   const enterStart = (index - 1) / segments;
   const enterEnd = index / segments;
@@ -764,9 +870,10 @@ function StackCardLayer({
           draggable={false}
         />
       )}
+      {children}
       {/* Depth cue for the outgoing card — replaces the shrink, so no gap. */}
       <motion.div
-        className="pointer-events-none absolute inset-0 bg-black"
+        className="pointer-events-none absolute inset-0 z-[2] bg-black"
         style={{ opacity: dim }}
         aria-hidden
       />
