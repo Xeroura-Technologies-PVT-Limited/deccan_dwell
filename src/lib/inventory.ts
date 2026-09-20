@@ -308,6 +308,18 @@ export async function getBookingById(bookingId: string) {
   return row ? toBooking(row) : null;
 }
 
+export async function getBookingByIdAndEmail(bookingId: string, email: string) {
+  await expireStaleHolds();
+  const row = await prisma.booking.findFirst({
+    where: {
+      id: bookingId.trim(),
+      guestEmail: email.trim().toLowerCase(),
+    },
+    include: { roomType: true },
+  });
+  return row ? { ...toBooking(row), roomName: row.roomType.name } : null;
+}
+
 export async function getBookingByOrderId(orderId: string) {
   await expireStaleHolds();
   const row = await prisma.booking.findUnique({

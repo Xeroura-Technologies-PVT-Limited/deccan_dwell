@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { ROOM_TYPES, extraGuests, stayTotalInr } from "@/lib/inventory-client";
 import { EXTRA_BED_INR, HOUSE_RULES, CHECK_IN_TIME, CHECK_OUT_TIME } from "@/lib/hotel";
 import { todayISO as indiaToday } from "@/lib/dates";
@@ -225,8 +226,7 @@ export function BookingSection() {
           : " We will confirm by email once mail is connected."
       }`,
     );
-    setCheckIn("");
-    setCheckOut("");
+    window.location.href = `/booking/${data.booking.id}?email=${encodeURIComponent(guestEmail)}`;
   }
 
   async function startPayment() {
@@ -297,8 +297,7 @@ export function BookingSection() {
               : " We will confirm by email once mail is connected."
           }`,
         );
-        setCheckIn("");
-        setCheckOut("");
+          window.location.href = `/booking/${data.booking.id}?email=${encodeURIComponent(guestEmail)}`;
         return;
       }
 
@@ -505,6 +504,13 @@ export function BookingSection() {
               </button>
             )}
           </div>
+
+          <Link
+            href="/booking/lookup"
+            className="inline-block font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.18em] text-[var(--dd-gold)] hover:text-[var(--dd-cream)]"
+          >
+            Already booked? Look up your reservation
+          </Link>
 
           {message && (
             <p
