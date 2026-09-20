@@ -7,13 +7,29 @@ import {
   type SessionUser,
   type UserRole,
 } from "./session";
+import { prisma } from "./db";
 
 export type { SessionUser, UserRole };
 export { loginUser, registerGuest, ensureAdminUser, normalizeEmail } from "./users";
 
 export async function getSession() {
   const jar = await cookies();
-  return readSession(jar.get(SESSION_COOKIE)?.value);
+  const session = await readSession(jar.get(SESSION_COOKIE)?.value);
+  if (!session) return null;
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.id },
+    select: { email: true, name: true, phone: true, role: true },
+  });
+  if (!user) return null;
+
+  return {
+    ...session,
+    email: user.email,
+    name: user.name,
+    phone: user.phone,
+    role: user.role === "admin" ? "admin" : "guest",
+  };
 }
 
 export async function requireAdmin() {
