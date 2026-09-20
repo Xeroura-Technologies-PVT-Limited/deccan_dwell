@@ -39,6 +39,10 @@ yarn-error.log*
 *.db-journal
 prisma/dev.db
 
+# Supabase local runtime state and generated secrets
+/supabase/.temp/
+/supabase/.branches/
+
 # vercel
 .vercel
 

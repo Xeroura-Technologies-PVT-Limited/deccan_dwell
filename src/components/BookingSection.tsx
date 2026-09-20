@@ -19,6 +19,8 @@ type PaymentSession = {
   holdMinutes: number;
 };
 
+const ONLINE_PAYMENTS_ENABLED = false;
+
 export function BookingSection() {
   const today = indiaToday();
   const [roomTypeId, setRoomTypeId] = useState(ROOM_TYPES[0].id);
@@ -249,6 +251,11 @@ export function BookingSection() {
     const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
     const paymentMethod =
       submitter?.value === "at_hotel" ? "at_hotel" : "online";
+    if (paymentMethod === "online" && !ONLINE_PAYMENTS_ENABLED) {
+      setStatus("error");
+      setMessage("Online payment is not available yet. Please pay at the hotel.");
+      return;
+    }
     if (!checkIn || !checkOut) {
       setStatus("error");
       setMessage("Pick check-in and check-out on the calendar.");
@@ -328,8 +335,8 @@ export function BookingSection() {
             Book your stay
           </h2>
           <p className="mt-4 max-w-md font-[family-name:var(--font-body)] text-[var(--dd-cream)]/70">
-            Each calendar day shows how many rooms are left. Pay the full stay
-            online, or reserve now and pay at the hotel.
+            Each calendar day shows how many rooms are left. Reserve now and
+            pay at the hotel.
           </p>
           {quote && !quote.soldOut && room && (
             <p className="mt-8 font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.2em] text-[var(--dd-gold)]">
@@ -466,10 +473,18 @@ export function BookingSection() {
             <button
               type="submit"
               value="online"
-              disabled={status === "loading" || status === "paid" || quote?.soldOut}
+              disabled={
+                !ONLINE_PAYMENTS_ENABLED ||
+                status === "loading" ||
+                status === "paid" ||
+                quote?.soldOut
+              }
+              title="Online payment is not available yet"
               className="border border-[var(--dd-gold)] px-6 py-3 font-[family-name:var(--font-nav)] text-[11px] uppercase tracking-[0.2em] text-[var(--dd-cream)] transition hover:bg-[var(--dd-gold)] hover:text-[var(--dd-green)] disabled:opacity-50"
             >
-              {status === "loading" ? "Please wait…" : "Pay online"}
+              {ONLINE_PAYMENTS_ENABLED && status === "loading"
+                ? "Please wait…"
+                : "Pay online unavailable"}
             </button>
             <button
               type="submit"
