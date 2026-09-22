@@ -85,15 +85,18 @@ export function BookingsTable({
   const [rows, setRows] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notes, setNotes] = useState<Record<string, string>>(
+    Object.fromEntries(initial.map((row) => [row.id, row.adminNote ?? ""])),
+  );
 
-  async function act(id: string, action: "cancel" | "mark_paid") {
+  async function act(id: string, action: "cancel" | "mark_paid" | "set_status" | "note", value?: string) {
     setBusy(id);
     setError(null);
     try {
       const res = await fetch("/api/admin/bookings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, action }),
+        body: JSON.stringify({ id, action, ...(action === "set_status" ? { status: value } : {}), ...(action === "note" ? { note: value } : {}) }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not update");
@@ -161,6 +164,16 @@ export function BookingsTable({
               {admin && (
                 <td className="py-4">
                   <div className="flex flex-wrap gap-2">
+                    <select
+                      value={row.status}
+                      disabled={busy === row.id}
+                      onChange={(event) => void act(row.id, "set_status", event.target.value)}
+                      className="border border-[var(--dd-gold)]/30 bg-[var(--dd-green)] px-2 py-1 text-xs"
+                    >
+                      {(["pending", "confirmed", "checked_in", "checked_out", "cancelled", "expired"] as const).map((status) => (
+                        <option key={status} value={status}>{status.replace("_", " ")}</option>
+                      ))}
+                    </select>
                     {row.status !== "cancelled" && row.paymentId !== "paid_at_hotel" && row.paymentMethod === "at_hotel" && (
                       <button
                         type="button"
@@ -181,6 +194,15 @@ export function BookingsTable({
                         Cancel
                       </button>
                     )}
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      value={notes[row.id] ?? ""}
+                      onChange={(event) => setNotes((current) => ({ ...current, [row.id]: event.target.value }))}
+                      placeholder="Admin note"
+                      className="min-w-0 flex-1 border border-[var(--dd-gold)]/20 bg-transparent px-2 py-1 text-xs"
+                    />
+                    <button type="button" disabled={busy === row.id} onClick={() => void act(row.id, "note", notes[row.id] ?? "")} className="border border-white/20 px-2 py-1 text-[9px] uppercase tracking-[0.12em]">Save</button>
                   </div>
                 </td>
               )}

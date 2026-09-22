@@ -1,4 +1,10 @@
-export type BookingStatus = "pending" | "confirmed" | "cancelled" | "expired";
+export type BookingStatus =
+  | "pending"
+  | "confirmed"
+  | "checked_in"
+  | "checked_out"
+  | "cancelled"
+  | "expired";
 
 export type RoomKind = "room" | "suite";
 
@@ -36,6 +42,7 @@ export type Booking = {
   razorpayOrderId?: string;
   holdExpiresAt?: string;
   createdAt: string;
+  adminNote?: string;
   userId?: string;
 };
 

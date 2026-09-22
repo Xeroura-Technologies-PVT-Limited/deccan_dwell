@@ -27,6 +27,7 @@ function toBooking(row: {
   razorpayOrderId: string | null;
   holdExpiresAt: string | null;
   createdAt: string;
+  adminNote: string | null;
   userId: string | null;
 }): Booking {
   return {
@@ -46,6 +47,7 @@ function toBooking(row: {
     razorpayOrderId: row.razorpayOrderId ?? undefined,
     holdExpiresAt: row.holdExpiresAt ?? undefined,
     createdAt: row.createdAt,
+    adminNote: row.adminNote ?? undefined,
     userId: row.userId ?? undefined,
   };
 }
@@ -64,17 +66,24 @@ export async function ensureRoomTypes() {
         basePriceInr: room.basePriceInr,
         image: room.image,
       },
-      update: {
-        name: room.name,
-        slug: room.slug,
-        description: room.description,
-        amenities: JSON.stringify(room.amenities),
-        totalUnits: room.totalUnits,
-        basePriceInr: room.basePriceInr,
-        image: room.image,
-      },
+      update: {},
     });
   }
+}
+
+async function managedRooms() {
+  await ensureRoomTypes();
+  const stored = await prisma.roomType.findMany({ orderBy: { id: "asc" } });
+  return stored.flatMap((row) => {
+    const catalog = getRoomTypeById(row.id);
+    return catalog
+      ? [{ ...catalog, name: row.name, description: row.description, totalUnits: row.totalUnits, basePriceInr: row.basePriceInr, image: row.image }]
+      : [];
+  });
+}
+
+export async function listPublicRooms() {
+  return managedRooms();
 }
 
 export async function expireStaleHolds(now = new Date()) {
@@ -136,7 +145,7 @@ export async function getMonthAvailability(
   roomTypeId: string,
   month: string,
 ): Promise<{ roomTypeId: string; totalUnits: number; days: CalendarDay[] } | { error: string }> {
-  const room = getRoomTypeById(roomTypeId);
+  const room = (await managedRooms()).find((item) => item.id === roomTypeId);
   if (!room) return { error: "Unknown room type" };
   if (!/^\d{4}-\d{2}$/.test(month)) return { error: "month must be YYYY-MM" };
 
@@ -163,8 +172,8 @@ export async function getAvailability(
   const stay = stayNights(checkIn, checkOut);
   const nights = stay.length;
   const types = roomTypeId
-    ? ROOM_TYPES.filter((r) => r.id === roomTypeId)
-    : ROOM_TYPES;
+    ? (await managedRooms()).filter((r) => r.id === roomTypeId)
+    : await managedRooms();
   const nowIso = new Date().toISOString();
 
   const results: AvailabilityResult[] = [];
@@ -204,7 +213,7 @@ export async function createPendingBooking(input: {
   paymentMethod?: PaymentMethod;
   userId?: string;
 }): Promise<{ ok: true; booking: Booking } | { ok: false; error: string }> {
-  const room = getRoomTypeById(input.roomTypeId);
+  const room = (await managedRooms()).find((item) => item.id === input.roomTypeId);
   if (!room) return { ok: false, error: "Unknown room type" };
 
   const stay = stayNights(input.checkIn, input.checkOut);
@@ -216,8 +225,6 @@ export async function createPendingBooking(input: {
   const payAtHotel = input.paymentMethod === "at_hotel";
   const amountInr = stayTotalInr(room, nights, input.guests);
   const depositInr = payAtHotel ? 0 : amountInr;
-
-  await ensureRoomTypes();
 
   try {
     const booking = await prisma.$transaction(async (tx) => {
@@ -361,6 +368,105 @@ export async function cancelBooking(bookingId: string) {
   return { ok: true as const, booking: toBooking(updated) };
 }
 
+const ADMIN_STATUSES = ["pending", "confirmed", "checked_in", "checked_out", "cancelled", "expired"] as const;
+
+export async function updateBookingStatus(bookingId: string, status: (typeof ADMIN_STATUSES)[number]) {
+  const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+  if (!booking) return { ok: false as const, error: "Booking not found" };
+  if (booking.status === "expired" && status !== "cancelled") {
+    return { ok: false as const, error: "Expired bookings cannot be reopened" };
+  }
+  if (booking.status === "checked_out" && status !== "cancelled") {
+    return { ok: false as const, error: "Checked-out bookings cannot change status" };
+  }
+  const updated = await prisma.booking.update({ where: { id: bookingId }, data: { status } });
+  return { ok: true as const, booking: toBooking(updated) };
+}
+
+export async function updateBookingNote(bookingId: string, adminNote: string) {
+  const updated = await prisma.booking.update({
+    where: { id: bookingId },
+    data: { adminNote: adminNote.trim().slice(0, 1000) || null },
+  });
+  return toBooking(updated);
+}
+
+export async function getAdminDashboardMetrics(date: string) {
+  await expireStaleHolds();
+  const activeBookings = { notIn: ["cancelled", "expired"] };
+  const [rooms, arrivals, departures, occupied, bookedRevenue, collectedRevenue] = await Promise.all([
+    prisma.roomType.aggregate({ _sum: { totalUnits: true } }),
+    prisma.booking.count({ where: { checkIn: date, status: activeBookings } }),
+    prisma.booking.count({ where: { checkOut: date, status: activeBookings } }),
+    prisma.bookingNight.count({ where: { night: date, booking: { status: { in: ["confirmed", "checked_in"] } } } }),
+    prisma.booking.aggregate({ _sum: { amountInr: true }, where: { createdAt: { startsWith: date }, status: { notIn: ["cancelled", "expired"] } } }),
+    prisma.booking.aggregate({ _sum: { amountInr: true }, where: { createdAt: { startsWith: date }, OR: [{ paymentMethod: "online", status: "confirmed" }, { paymentId: "paid_at_hotel" }] } }),
+  ]);
+  const totalUnits = rooms._sum.totalUnits ?? 0;
+  return {
+    date,
+    arrivals,
+    departures,
+    occupied,
+    totalUnits,
+    occupancyPercent: totalUnits ? Math.round((occupied / totalUnits) * 100) : 0,
+    bookedRevenue: bookedRevenue._sum.amountInr ?? 0,
+    collectedRevenue: collectedRevenue._sum.amountInr ?? 0,
+  };
+}
+
+export async function getAdminCalendar(month: string) {
+  await expireStaleHolds();
+  const dates = daysInMonth(month);
+  const rows = await prisma.bookingNight.findMany({
+    where: { night: { in: dates } },
+    include: { booking: { include: { roomType: true } } },
+    orderBy: { night: "asc" },
+  });
+  return rows.map((row) => ({
+    night: row.night,
+    booking: { ...toBooking(row.booking), roomName: row.booking.roomType.name },
+  }));
+}
+
+export async function listAdminRooms() {
+  await ensureRoomTypes();
+  return prisma.roomType.findMany({ orderBy: { id: "asc" } });
+}
+
+export async function updateAdminRoom(input: {
+  id: string;
+  name?: string;
+  description?: string;
+  image?: string;
+  basePriceInr?: number;
+  totalUnits?: number;
+}) {
+  if (input.basePriceInr !== undefined && input.basePriceInr < 0) {
+    return { ok: false as const, error: "Price cannot be negative" };
+  }
+  if (input.totalUnits !== undefined && input.totalUnits < 1) {
+    return { ok: false as const, error: "A room must have at least one unit" };
+  }
+  try {
+    const room = await prisma.roomType.update({
+      where: { id: input.id },
+      data: {
+        name: input.name?.trim(),
+        description: input.description?.trim(),
+        image: input.image?.trim(),
+        basePriceInr: input.basePriceInr,
+        totalUnits: input.totalUnits,
+      },
+    });
+    return { ok: true as const, room };
+  } catch {
+    return { ok: false as const, error: "Room not found" };
+  }
+}
+
+export { ADMIN_STATUSES };
+
 export async function createBookingRequest(input: {
   bookingId: string;
   userId: string;
@@ -439,7 +545,7 @@ export async function reviewBookingRequest(requestId: string, status: "approved"
         if (!request.requestedCheckIn || !request.requestedCheckOut || request.requestedCheckIn >= request.requestedCheckOut) {
           throw new Error("Invalid requested dates");
         }
-        const room = getRoomTypeById(booking.roomTypeId);
+        const room = (await managedRooms()).find((item) => item.id === booking.roomTypeId);
         if (!room) throw new Error("Unknown room type");
         const requestedNights = stayNights(request.requestedCheckIn, request.requestedCheckOut);
         const occupied = await tx.bookingNight.findMany({

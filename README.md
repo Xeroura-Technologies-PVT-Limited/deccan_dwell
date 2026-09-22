@@ -64,6 +64,18 @@ Scroll the first section: the arched Mysuru window scales up like a push-in shot
 
 Booking lookup is protected by both booking ID and normalized guest email. A mismatched email does not reveal booking details.
 
+### Admin operations
+
+The protected `/admin` dashboard includes:
+
+- Arrivals, departures, occupancy, booked revenue, and collected revenue for a selected day
+- A month-based booking calendar with room filtering
+- Status updates for pending, confirmed, checked in, checked out, cancelled, and expired bookings
+- Admin notes on individual bookings
+- CSV export at `/api/admin/bookings/export`
+- Room price, unit count, image path, name, and description management
+- Review of guest cancellation and date-change requests
+
 Signed-in guests can request a cancellation or new dates from `/account`. Requests are saved for hotel review; approving a date change checks availability and moves the booking nights transactionally. Set `CRON_SECRET` in production so the expiry endpoint only accepts the scheduled job.
 
 ### Razorpay online payment

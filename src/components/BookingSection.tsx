@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { ROOM_TYPES, extraGuests, stayTotalInr } from "@/lib/inventory-client";
+import type { RoomType } from "@/lib/types";
 import { EXTRA_BED_INR, HOUSE_RULES, CHECK_IN_TIME, CHECK_OUT_TIME } from "@/lib/hotel";
 import { todayISO as indiaToday } from "@/lib/dates";
 import type { AvailabilityResult, CalendarDay } from "@/lib/types";
@@ -24,6 +25,7 @@ const ONLINE_PAYMENTS_ENABLED = false;
 
 export function BookingSection() {
   const today = indiaToday();
+  const [rooms, setRooms] = useState<RoomType[]>(ROOM_TYPES);
   const [roomTypeId, setRoomTypeId] = useState(ROOM_TYPES[0].id);
   const [month, setMonth] = useState(today.slice(0, 7));
   const [checkIn, setCheckIn] = useState("");
@@ -43,12 +45,22 @@ export function BookingSection() {
   const [quote, setQuote] = useState<AvailabilityResult | null>(null);
 
   const room = useMemo(
-    () => ROOM_TYPES.find((r) => r.id === roomTypeId),
-    [roomTypeId],
+    () => rooms.find((r) => r.id === roomTypeId),
+    [roomTypeId, rooms],
   );
 
   const stayTotal = room && quote ? stayTotalInr(room, quote.nights, guests) : 0;
   const extraBedCount = room ? extraGuests(room, guests) : 0;
+
+  useEffect(() => {
+    fetch("/api/rooms")
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data = await response.json();
+        if (Array.isArray(data.rooms) && data.rooms.length > 0) setRooms(data.rooms);
+      })
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!room) return;
@@ -77,7 +89,7 @@ export function BookingSection() {
     const query = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
     const params = new URLSearchParams(query);
     const slug = params.get("room");
-    const found = ROOM_TYPES.find((r) => r.slug === slug);
+    const found = rooms.find((r) => r.slug === slug);
     if (found) setRoomTypeId(found.id);
     const inn = params.get("in");
     const out = params.get("out");
@@ -86,7 +98,7 @@ export function BookingSection() {
       setMonth(inn.slice(0, 7));
     }
     if (out) setCheckOut(out);
-  }, []);
+  }, [rooms]);
 
   useEffect(() => {
     let cancelled = false;
@@ -366,7 +378,7 @@ export function BookingSection() {
               }}
               className="mt-2 w-full border-b border-[var(--dd-gold)]/40 bg-transparent py-3 font-[family-name:var(--font-body)] outline-none"
             >
-              {ROOM_TYPES.map((r) => (
+              {rooms.map((r) => (
                 <option key={r.id} value={r.id} className="bg-[var(--dd-green)]">
                   {r.name}
                   {r.subtitle ? ` · ${r.subtitle}` : ""} — ₹

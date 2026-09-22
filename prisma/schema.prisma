@@ -52,6 +52,7 @@ model Booking {
   razorpayOrderId String?        @unique
   holdExpiresAt   String?
   createdAt       String
+  adminNote       String?
   nights          BookingNight[]
   requests        BookingRequest[]
 
