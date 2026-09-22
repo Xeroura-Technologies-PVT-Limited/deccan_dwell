@@ -5,6 +5,67 @@ import type { Booking } from "@/lib/types";
 
 type Row = Booking & { roomName?: string };
 
+function GuestBookingActions({ row }: { row: Row }) {
+  const [mode, setMode] = useState<"cancellation" | "date_change" | null>(null);
+  const [checkIn, setCheckIn] = useState("");
+  const [checkOut, setCheckOut] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/account/bookings/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookingId: row.id,
+          type: mode,
+          requestedCheckIn: mode === "date_change" ? checkIn : undefined,
+          requestedCheckOut: mode === "date_change" ? checkOut : undefined,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not submit request");
+      setMessage("Request sent to the hotel.");
+      setMode(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not submit request");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (row.status === "cancelled" || row.status === "expired") return null;
+
+  return (
+    <div className="mt-3 space-y-2">
+      {mode === "date_change" && (
+        <div className="flex flex-wrap gap-2">
+          <input type="date" value={checkIn} onChange={(event) => setCheckIn(event.target.value)} className="border border-[var(--dd-gold)]/30 bg-transparent px-2 py-1 text-xs" />
+          <input type="date" value={checkOut} onChange={(event) => setCheckOut(event.target.value)} className="border border-[var(--dd-gold)]/30 bg-transparent px-2 py-1 text-xs" />
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {!mode && (
+          <>
+            <button type="button" onClick={() => setMode("date_change")} className="text-[10px] uppercase tracking-[0.12em] text-[var(--dd-gold)]">Request date change</button>
+            <button type="button" onClick={() => setMode("cancellation")} className="text-[10px] uppercase tracking-[0.12em] text-[var(--dd-cream)]/60">Request cancellation</button>
+          </>
+        )}
+        {mode && (
+          <>
+            <button type="button" disabled={busy} onClick={() => void submit()} className="border border-[var(--dd-gold)]/50 px-2 py-1 text-[10px] uppercase tracking-[0.12em]">{busy ? "Sending..." : "Send request"}</button>
+            <button type="button" disabled={busy} onClick={() => setMode(null)} className="px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-[var(--dd-cream)]/50">Back</button>
+          </>
+        )}
+      </div>
+      {message && <p className="text-[11px] text-[var(--dd-gold)]">{message}</p>}
+    </div>
+  );
+}
+
 function payLabel(row: Row) {
   if (row.status === "cancelled" || row.status === "expired") return "—";
   if (row.paymentMethod === "online" && row.status === "confirmed") return "Paid online";
@@ -95,6 +156,7 @@ export function BookingsTable({
                 {row.status}
                 <br />
                 <span className="text-[11px] text-[var(--dd-gold)]/80">{payLabel(row)}</span>
+                {!admin && <GuestBookingActions row={row} />}
               </td>
               {admin && (
                 <td className="py-4">

@@ -52,6 +52,7 @@ Scroll the first section: the arched Mysuru window scales up like a push-in shot
 - `GET /api/availability?month=YYYY-MM&roomTypeId=rt_executive`
 - `GET /api/availability?checkIn=YYYY-MM-DD&checkOut=YYYY-MM-DD`
 - Pending holds last 15 minutes, then those nights free up again
+- A Vercel cron job calls `/api/cron/expire-bookings` every five minutes to expire unpaid holds automatically
 
 ### Booking and confirmation
 1. Guest selects a room, dates, guests, and contact details.
@@ -62,6 +63,8 @@ Scroll the first section: the arched Mysuru window scales up like a push-in shot
 6. Guests can recover a booking at `/booking/lookup` using the booking ID and reservation email.
 
 Booking lookup is protected by both booking ID and normalized guest email. A mismatched email does not reveal booking details.
+
+Signed-in guests can request a cancellation or new dates from `/account`. Requests are saved for hotel review; approving a date change checks availability and moves the booking nights transactionally. Set `CRON_SECRET` in production so the expiry endpoint only accepts the scheduled job.
 
 ### Razorpay online payment
 

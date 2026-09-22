@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { listAdminBookings } from "@/lib/inventory";
 import { BookingsTable, SignOutButton } from "@/components/BookingsTable";
+import { AdminBookingRequests } from "@/components/AdminBookingRequests";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,7 @@ export default async function AdminPage() {
           <SignOutButton redirectTo="/admin/login" />
         </div>
         <BookingsTable initial={bookings} admin />
+        <AdminBookingRequests />
       </div>
     </main>
   );

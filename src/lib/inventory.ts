@@ -361,6 +361,138 @@ export async function cancelBooking(bookingId: string) {
   return { ok: true as const, booking: toBooking(updated) };
 }
 
+export async function createBookingRequest(input: {
+  bookingId: string;
+  userId: string;
+  type: "cancellation" | "date_change";
+  requestedCheckIn?: string;
+  requestedCheckOut?: string;
+  note?: string;
+}) {
+  await expireStaleHolds();
+  const booking = await prisma.booking.findFirst({
+    where: { id: input.bookingId, userId: input.userId },
+  });
+  if (!booking) return { ok: false as const, error: "Booking not found" };
+  if (booking.status === "cancelled" || booking.status === "expired") {
+    return { ok: false as const, error: "This booking is no longer active" };
+  }
+
+  const existing = await prisma.bookingRequest.findFirst({
+    where: { bookingId: booking.id, status: "pending" },
+  });
+  if (existing) {
+    return { ok: false as const, error: "A request is already awaiting review" };
+  }
+
+  if (input.type === "date_change") {
+    if (!input.requestedCheckIn || !input.requestedCheckOut || input.requestedCheckIn >= input.requestedCheckOut) {
+      return { ok: false as const, error: "Choose a valid new date range" };
+    }
+  }
+
+  const request = await prisma.bookingRequest.create({
+    data: {
+      id: newId("rq"),
+      bookingId: booking.id,
+      type: input.type,
+      requestedCheckIn: input.requestedCheckIn,
+      requestedCheckOut: input.requestedCheckOut,
+      note: input.note?.trim() || null,
+      createdAt: new Date().toISOString(),
+    },
+  });
+  return { ok: true as const, request };
+}
+
+export async function listBookingRequests() {
+  const rows = await prisma.bookingRequest.findMany({
+    include: { booking: { include: { roomType: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map((row) => ({
+    ...row,
+    booking: { ...toBooking(row.booking), roomName: row.booking.roomType.name },
+  }));
+}
+
+export async function reviewBookingRequest(requestId: string, status: "approved" | "rejected") {
+  const request = await prisma.bookingRequest.findUnique({ where: { id: requestId } });
+  if (!request) return { ok: false as const, error: "Request not found" };
+  if (request.status !== "pending") return { ok: false as const, error: "Request already reviewed" };
+
+  try {
+    const updated = await prisma.$transaction(async (tx) => {
+      const booking = await tx.booking.findUnique({ where: { id: request.bookingId } });
+      if (!booking || booking.status === "cancelled" || booking.status === "expired") {
+        throw new Error("Booking is no longer active");
+      }
+
+      if (status === "approved" && request.type === "cancellation") {
+        await tx.booking.update({
+          where: { id: booking.id },
+          data: { status: "cancelled" },
+        });
+      }
+
+      if (status === "approved" && request.type === "date_change") {
+        if (!request.requestedCheckIn || !request.requestedCheckOut || request.requestedCheckIn >= request.requestedCheckOut) {
+          throw new Error("Invalid requested dates");
+        }
+        const room = getRoomTypeById(booking.roomTypeId);
+        if (!room) throw new Error("Unknown room type");
+        const requestedNights = stayNights(request.requestedCheckIn, request.requestedCheckOut);
+        const occupied = await tx.bookingNight.findMany({
+          where: {
+            roomTypeId: room.id,
+            night: { in: requestedNights },
+            bookingId: { not: booking.id },
+            booking: {
+              OR: [
+                { status: "confirmed" },
+                { AND: [{ status: "pending" }, { holdExpiresAt: { gt: new Date().toISOString() } }] },
+              ],
+            },
+          },
+          select: { night: true },
+        });
+        const occupiedByNight = new Map<string, number>();
+        for (const row of occupied) {
+          occupiedByNight.set(row.night, (occupiedByNight.get(row.night) ?? 0) + 1);
+        }
+        if (requestedNights.some((night) => (occupiedByNight.get(night) ?? 0) >= room.totalUnits)) {
+          throw new Error("The requested dates are not available");
+        }
+        await tx.bookingNight.deleteMany({ where: { bookingId: booking.id } });
+        await tx.booking.update({
+          where: { id: booking.id },
+          data: {
+            checkIn: request.requestedCheckIn,
+            checkOut: request.requestedCheckOut,
+            amountInr: stayTotalInr(room, requestedNights.length, booking.guests),
+            depositInr: booking.paymentMethod === "at_hotel"
+              ? 0
+              : stayTotalInr(room, requestedNights.length, booking.guests),
+          },
+        });
+        await tx.bookingNight.createMany({
+          data: requestedNights.map((night) => ({
+            id: newId("nt"), bookingId: booking.id, roomTypeId: room.id, night,
+          })),
+        });
+      }
+
+      return tx.bookingRequest.update({
+        where: { id: request.id },
+        data: { status, reviewedAt: new Date().toISOString() },
+      });
+    });
+    return { ok: true as const, request: updated };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "Could not review request" };
+  }
+}
+
 export async function markBookingPaid(bookingId: string) {
   await expireStaleHolds();
   const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
