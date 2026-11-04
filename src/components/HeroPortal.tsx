@@ -153,6 +153,27 @@ export function HeroPortal() {
     if (!window.location.hash) window.scrollTo(0, 0);
   }, []);
 
+  // Mobile browsers resize the viewport as the address bar slides in and out.
+  // Pin the hero to one measured height so the pinned arch never jumps or
+  // drifts mid-scroll; only a real change (rotation, window resize) re-measures.
+  useEffect(() => {
+    const root = document.documentElement;
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    let lastW = window.innerWidth;
+    let lastH = window.innerHeight;
+    root.style.setProperty("--dd-hero-h", `${lastH}px`);
+    const onResize = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      if (coarse && w === lastW && Math.abs(h - lastH) < 160) return;
+      lastW = w;
+      lastH = h;
+      root.style.setProperty("--dd-hero-h", `${h}px`);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   /** 0 → 1 as the hero makes its entrance beneath the lifting intro curtain. */
   const rise = useMotionValue(0);
 
@@ -381,11 +402,11 @@ export function HeroPortal() {
       id="home"
       ref={containerRef}
       className="relative bg-[var(--dd-hero-base)]"
-      style={{ height: `${SECTION_VH}vh` }}
+      style={{ height: `calc(var(--dd-hero-h, 100vh) * ${SECTION_VH / 100})` }}
     >
       <div
         ref={stickyRef}
-        className="sticky top-0 h-[100svh] overflow-hidden bg-[var(--dd-hero-base)]"
+        className="sticky top-0 h-[var(--dd-hero-h,100svh)] overflow-hidden bg-[var(--dd-hero-base)]"
       >
         {/* Green atmosphere: full bleed and never clipped, so the stacked
             gradients and blended palm rasterise once. */}

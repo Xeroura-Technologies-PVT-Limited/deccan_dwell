@@ -56,3 +56,4 @@ setup-db.command
 setup-db.log
 push.command
 push.log
+vercel-production.env

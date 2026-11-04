@@ -17,7 +17,7 @@ export function WelcomeSection() {
   return (
     <section
       id="welcome"
-      className="dd-paper dd-grain dd-curtain relative z-10 -mt-[100vh] overflow-hidden"
+      className="dd-paper dd-grain dd-curtain relative z-10 -mt-[var(--dd-hero-h,100vh)] overflow-hidden"
     >
       <div className="dd-container pb-[clamp(96px,12vw,176px)] pt-[clamp(128px,15vw,220px)]">
         <Reveal className="flex justify-center">

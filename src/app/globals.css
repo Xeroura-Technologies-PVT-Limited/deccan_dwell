@@ -1749,3 +1749,30 @@ html.dd-has-cursor :is(input, textarea, select, [contenteditable="true"]) {
   }
   .dd-ticket-shadow { filter: none; transform: none !important; }
 }
+
+/* ------------------------------------------------------------------
+   Hero on phones and tablets: keep every frame compositor-cheap.
+   The SVG drop-shadow filter, backdrop blur and blend mode all force a
+   full repaint while the title and arch move, which is what stutters on
+   iOS Safari and Android Chrome.
+   ------------------------------------------------------------------ */
+@media (hover: none), (max-width: 1023px) {
+  #home svg text {
+    filter: none !important;
+  }
+  #home .backdrop-blur-\[6px\] {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background-color: rgba(6, 22, 19, 0.72);
+  }
+  .dd-hero-palms {
+    mix-blend-mode: normal;
+    opacity: 0.55;
+  }
+  .dd-hero-palms-sway {
+    animation: none;
+  }
+  .dd-hero-arch {
+    will-change: clip-path;
+  }
+}

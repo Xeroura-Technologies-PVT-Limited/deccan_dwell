@@ -214,7 +214,7 @@ export function SiteHeader() {
           </a>
 
           <div className="flex items-center gap-3 sm:gap-5">
-            <div className={`transition-opacity duration-500 ${open ? "pointer-events-none opacity-0" : "opacity-100"}`}>
+            <div className={`hidden transition-opacity duration-500 sm:block ${open ? "pointer-events-none opacity-0" : "opacity-100"}`}>
               <ProfileMenu variant="header" />
             </div>
             <a
