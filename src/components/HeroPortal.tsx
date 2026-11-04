@@ -1,121 +1,36 @@
 "use client";
 
-import Image from "next/image";
 import {
+  animate,
   motion,
+  useMotionValue,
   useScroll,
+  useSpring,
   useTransform,
-  type MotionValue,
 } from "framer-motion";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { MysuruStory } from "./MysuruStory";
-import { HotelTell } from "./HotelTell";
-import { MysuruVisit } from "./MysuruVisit";
-import { ProfileMenu } from "./ProfileMenu";
-
-function IconInstagram({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25">
-      <rect x="3" y="3" width="18" height="18" rx="5" />
-      <circle cx="12" cy="12" r="4" />
-      <circle cx="17.5" cy="6.5" r="0.8" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-function IconFacebook({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25">
-      <path d="M14 8h2.5V5H14a4 4 0 0 0-4 4v2H8v3h2v7h3v-7h2.2l.5-3H13V9a1 1 0 0 1 1-1Z" />
-    </svg>
-  );
-}
-
-function IconPin({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25">
-      <path d="M12 21s7-5.2 7-11a7 7 0 1 0-14 0c0 5.8 7 11 7 11Z" />
-      <circle cx="12" cy="10" r="2.5" />
-    </svg>
-  );
-}
-
-const NAV = [
-  { label: "Home", href: "#home" },
-  { label: "Rooms", href: "#rooms" },
-  { label: "Suites", href: "#suites" },
-  { label: "Experience", href: "#experience" },
-  { label: "Gallery", href: "#gallery" },
-  { label: "Contact", href: "#contact" },
-];
-
-type StackCard = {
-  id: string;
-  image: string;
-  alt: string;
-};
-
-/** Card 0 is the hero plate seen through the arch — never a second copy. */
-const STACK_CARDS: StackCard[] = [
-  {
-    id: "wide",
-    image: "/images/hero-wide.jpg",
-    alt: "Hills around Deccan Dwell, Mysuru",
-  },
-  {
-    id: "exterior",
-    image: "/images/building-exterior-hd.jpg",
-    alt: "Deccan Dwell building exterior",
-  },
-  {
-    id: "entrance",
-    image: "/images/entrance-stairs-hd.jpg",
-    alt: "Deccan Dwell entrance stairs and sign",
-  },
-  {
-    id: "deluxe",
-    image: "/images/room-deluxe.jpg",
-    alt: "Premium Deluxe room",
-  },
-  {
-    id: "suite",
-    image: "/images/room-suite.jpg",
-    alt: "Suite interior",
-  },
-];
-
-const STACK_SEGMENTS = STACK_CARDS.length - 1;
+import { useEffect, useMemo, useRef, useState } from "react";
 
 /**
- * Hero phases are authored in viewport-heights of *scroll*, then converted to
- * 0–1 progress. That way inserting the Mysuru polaroid story does not speed
- * up the arch or the card stack.
+ * The opening shot.
  *
- * The original 500vh section had a 400vh scroll range (offset end-start).
+ * Phase 1 — we travel through a fixed arch until it passes the camera,
+ *           revealing the hills full bleed, while the title flies past us.
+ * Phase 2 — the photo settles into a slow push-in and a single line of copy
+ *           surfaces; the next section then rises over it like a curtain
+ *           (it overlaps the last 100vh of this section — see `.dd-curtain`).
+ *
+ * Everything is authored in viewport-heights of scroll, then converted to the
+ * 0–1 progress of the pinned stage.
  */
-const BASE_SCROLL_VH = 400;
-const PORTAL_SCROLL_VH = 0.24 * BASE_SCROLL_VH;
-const STACK_SCROLL_VH = (1 - 0.32) * BASE_SCROLL_VH;
-const VISIT_SCROLL_VH = 240;
-const TELL_SCROLL_VH = 320;
-const STORY_SCROLL_VH = 280;
-const SCROLL_VH =
-  PORTAL_SCROLL_VH + VISIT_SCROLL_VH + TELL_SCROLL_VH + STORY_SCROLL_VH + STACK_SCROLL_VH;
-const SECTION_VH = SCROLL_VH + 100;
-
-const at = (oldProgress: number) => (oldProgress * BASE_SCROLL_VH) / SCROLL_VH;
+const SECTION_VH = 340;
+const SCROLL_VH = SECTION_VH - 100;
+const vh = (v: number) => v / SCROLL_VH;
 
 /** Arch has fully passed the camera. */
-const PORTAL_END = at(0.24);
-const VISIT_START = PORTAL_END;
-const VISIT_END = (PORTAL_SCROLL_VH + VISIT_SCROLL_VH) / SCROLL_VH;
-const TELL_START = VISIT_END;
-const TELL_END = (PORTAL_SCROLL_VH + VISIT_SCROLL_VH + TELL_SCROLL_VH) / SCROLL_VH;
-const STORY_START = TELL_END;
-const STORY_END =
-  (PORTAL_SCROLL_VH + VISIT_SCROLL_VH + TELL_SCROLL_VH + STORY_SCROLL_VH) / SCROLL_VH;
-/** Card stack begins after the polaroid map has settled. */
-const STACK_START = STORY_END;
+const PORTAL_END = vh(110);
+/** Title has fully passed the camera. */
+const TITLE_PASS = vh(70);
+const TITLE_CUT_START = TITLE_PASS * 0.93;
 
 /**
  * Camera depth for the title. translateZ must stay safely under this: at
@@ -123,45 +38,57 @@ const STACK_START = STORY_END;
  * inverts behind the camera.
  */
 const PERSPECTIVE = 1000;
-/** Scroll progress at which the title has fully passed the camera. */
-const TITLE_PASS = at(0.16);
 /**
  * Apparent size is PERSPECTIVE / (PERSPECTIVE - z), so ramping z linearly gives
- * the hyperbolic blow-up of a real fly-past. Stopping just short of PERSPECTIVE
- * caps magnification here instead of letting it run to infinity and invert.
- * 12x keeps the peak raster (~13.8k px) under the 16k GPU texture limit.
+ * the hyperbolic blow-up of a real fly-past. 12x keeps the peak raster under
+ * the 16k GPU texture limit.
  */
 const TITLE_MAGNIFICATION = 12;
 const TITLE_Z_MAX = PERSPECTIVE * (1 - 1 / TITLE_MAGNIFICATION);
-/**
- * The original read as a fly-past because it never dissolved — it just got too
- * big to be legible and was gone. Cutting opacity only over the last stretch,
- * where apparent size is nearly doubling, keeps that read; a longer fade leaves
- * a screen-filling translucent ghost hanging at the top instead.
- */
-const TITLE_CUT_START = TITLE_PASS * 0.93;
 
 /**
- * How far the arch has opened, as one uniform scale factor.
+ * "Mysore Palace Gate in Golden Morning Haze" — Surya Rajesh, Pexels licence.
+ * Cropped so the gate's axis sits dead centre, then graded into the brand
+ * palette: emerald-black shadows, champagne-gold haze.
+ */
+const HERO_IMAGE = {
+  src: "/images/hero-gate-graded-2000.jpg",
+  srcSet:
+    "/images/hero-gate-graded-1200.jpg 1200w, /images/hero-gate-graded-2000.jpg 2000w, /images/hero-gate-graded-3200.jpg 3200w",
+  alt: "The arched gate of Mysore Palace in golden morning haze",
+};
+
+/**
+ * The arch at rest. On phones it starts below the header so the logo and the
+ * Reserve / Menu buttons never sit on its shoulders; on wider screens the
+ * header's centre is empty, so it can rise higher.
  *
- * Because a single scale is applied to a fixed shape, the arch's proportions
- * and corner radius cannot drift — it reads as travelling through a fixed arch
- * rather than a shape morphing. `openness` 0 = closed, 1 = fully past us.
+ * Mirrors `.dd-hero-arch` in globals.css (the pre-hydration state).
+ */
+function archGeometry(boxW: number, boxH: number) {
+  const baseW = Math.min(Math.max(280, boxW * 0.42), 460);
+  const top = boxW < 768 ? Math.max(boxH * 0.05, 104) : boxH * 0.05;
+  const bottom = boxH * 0.05;
+  const baseH = boxH - top - bottom;
+  const baseR = Math.min(baseW / 2, baseH * 0.35);
+  const cy = top + baseH / 2;
+  return { baseW, baseH, baseR, cy };
+}
+
+/**
+ * How far the arch has opened, as one uniform scale factor — a fixed shape
+ * scaled up reads as travelling through an arch rather than a shape morphing.
  */
 function archScale(openness: number, boxW: number, boxH: number) {
   if (boxW <= 0 || boxH <= 0) return 1;
-
-  // Mirrors the CSS: width clamp(280px, 42vw, 460px), height 90%,
-  // radius min(width / 2, 31.5vh).
-  const baseW = Math.min(Math.max(280, boxW * 0.42), 460);
-  const baseH = boxH * 0.9;
-  const baseR = Math.min(baseW / 2, baseH * 0.35);
+  const { baseW, baseH, baseR, cy } = archGeometry(boxW, boxH);
+  const halfH = Math.max(cy, boxH - cy);
 
   // Scale at which the arch — rounded top corners included — has grown past
   // every edge of the viewport.
   const clearSides = boxW / baseW;
-  const clearHeight = boxH / baseH;
-  const clearTopCurve = boxH / 2 / (baseH / 2 - baseR);
+  const clearHeight = (2 * halfH) / baseH;
+  const clearTopCurve = halfH / (baseH / 2 - baseR);
   const clearCorners = boxW / (baseW + 2 * baseR);
   const maxScale = 1.12 * Math.max(clearSides, clearHeight, clearTopCurve, clearCorners);
 
@@ -173,40 +100,25 @@ function archScale(openness: number, boxW: number, boxH: number) {
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
- * The arch as a plain `inset()` with rounded top corners — a rounded-top
- * rectangle is exactly an arch.
+ * The arch as an `inset()` with rounded top corners.
  *
- * Written as a complete value rather than driven by a CSS custom property.
- * Custom properties inherit, so animating one here would invalidate style for
- * every card in the subtree on every frame; a direct `clip-path` write only
- * dirties this one element.
- *
- * The insets go negative once the arch outgrows the viewport, which is what
- * lets it keep travelling past us without its corner radius ever rounding the
- * corners of the screen.
+ * `rise` (0–1) is the entrance: the arch grows up from its threshold like a
+ * dome rising over the horizon, then the scroll takes over.
  */
-function archInset(openness: number, boxW: number, boxH: number) {
+function archInset(openness: number, boxW: number, boxH: number, rise = 1) {
   const scale = archScale(openness, boxW, boxH);
-
-  const baseW = Math.min(Math.max(280, boxW * 0.42), 460);
-  const baseH = boxH * 0.9;
-  const baseR = Math.min(baseW / 2, baseH * 0.35);
+  const { baseW, baseH, baseR, cy } = archGeometry(boxW, boxH);
 
   const x = round2((boxW - baseW * scale) / 2);
-  const y = round2((boxH - baseH * scale) / 2);
+  const fullTop = cy - (baseH * scale) / 2;
+  const sill = cy + (baseH * scale) / 2;
+  const top = round2(sill - (sill - fullTop) * Math.min(1, Math.max(0, rise)));
+  const bottom = round2(boxH - sill);
   const r = round2(baseR * scale);
 
-  return `inset(${y}px ${x}px ${y}px ${x}px round ${r}px ${r}px 0px 0px)`;
+  return `inset(${top}px ${x}px ${bottom}px ${x}px round ${r}px ${r}px 0px 0px)`;
 }
 
-/**
- * Phase 1 — we travel through a fixed arch until it passes the camera,
- * revealing the hero photo full bleed, while the title flies past us.
- * Phase 2 — that same photo is card 0 of the scroll stack.
- *
- * The photo is never scaled up and never duplicated. The arch is a clip path,
- * so the reveal is pure geometry and reverses exactly.
- */
 export function HeroPortal() {
   const containerRef = useRef<HTMLDivElement>(null);
   const stickyRef = useRef<HTMLDivElement>(null);
@@ -214,7 +126,6 @@ export function HeroPortal() {
   const nRef = useRef<SVGTSpanElement>(null);
 
   // Elements whose fade is applied by hand — see `fades` below.
-  const headerRef = useRef<HTMLElement>(null);
   const palmRef = useRef<HTMLDivElement>(null);
   const sideLeftRef = useRef<HTMLDivElement>(null);
   const sideRightRef = useRef<HTMLDivElement>(null);
@@ -222,74 +133,96 @@ export function HeroPortal() {
   const bookCtaRef = useRef<HTMLDivElement>(null);
   const bookBtnRef = useRef<HTMLAnchorElement>(null);
   const exploreRef = useRef<HTMLDivElement>(null);
-  const storyRef = useRef<HTMLDivElement>(null);
+  const statementRef = useRef<HTMLDivElement>(null);
+  const dimRef = useRef<HTMLDivElement>(null);
+  const restShadeRef = useRef<HTMLDivElement>(null);
   const [origin, setOrigin] = useState({ x: 50, y: 42 });
   const [box, setBox] = useState({ w: 0, h: 0 });
 
   const { scrollYProgress } = useScroll({
     target: containerRef,
-    offset: ["start start", "end start"],
+    offset: ["start start", "end end"],
   });
 
-  // The hero is a 500vh scrubbed timeline, so a reload that restores scroll
-  // drops you mid-animation: the header has already lifted away and the title
-  // is frozen mid fly-past. Always start the timeline from the beginning.
+  // A reload that restores scroll would drop you mid fly-past; always start
+  // the timeline from the beginning.
   useEffect(() => {
     if ("scrollRestoration" in window.history) {
       window.history.scrollRestoration = "manual";
     }
-    window.scrollTo(0, 0);
+    if (!window.location.hash) window.scrollTo(0, 0);
   }, []);
 
+  /** 0 → 1 as the hero makes its entrance beneath the lifting intro curtain. */
+  const rise = useMotionValue(0);
+
+  // Cursor depth: everything drifts a few pixels with the pointer, nearer
+  // layers more than farther ones. Desktop pointers only.
+  const pointerX = useMotionValue(0);
+  const pointerY = useMotionValue(0);
+  const mx = useSpring(pointerX, { stiffness: 50, damping: 18, mass: 0.8 });
+  const my = useSpring(pointerY, { stiffness: 50, damping: 18, mass: 0.8 });
+  const palmDX = useTransform(mx, (v) => v * -26);
+  const palmDY = useTransform(my, (v) => v * -14);
+  const photoDX = useTransform(mx, (v) => v * 14);
+  const photoDY = useTransform(my, (v) => v * 9);
+  const titleDX = useTransform(mx, (v) => v * -12);
+  const titleDY = useTransform(my, (v) => v * -7);
+  const sideDX = useTransform(mx, (v) => v * -7);
+
   useEffect(() => {
-    const extras = [
-      "/images/places/palace.jpg",
-      "/images/places/chamundi.jpg",
-      "/images/places/cathedral.jpg",
-      "/images/places/zoo.jpg",
-      "/images/places/jaganmohan.jpg",
-      "/images/places/brindavan.jpg",
-      "/images/building-exterior-hd.jpg",
-      "/images/entrance-stairs-hd.jpg",
-      "/images/story/bedroom.jpg",
-      "/images/story/suite.jpg",
-    ];
-    [...STACK_CARDS.map((card) => card.image), ...extras].forEach((src) => {
-      const img = new window.Image();
-      img.src = src;
-      void img.decode?.().catch(() => undefined);
-    });
-  }, []);
+    if (!window.matchMedia("(pointer: fine)").matches) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const onMove = (e: PointerEvent) => {
+      pointerX.set((e.clientX / window.innerWidth) * 2 - 1);
+      pointerY.set((e.clientY / window.innerHeight) * 2 - 1);
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    return () => window.removeEventListener("pointermove", onMove);
+  }, [pointerX, pointerY]);
+
+  useEffect(() => {
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let controls: ReturnType<typeof animate> | null = null;
+    const enter = () => {
+      if (rise.get() > 0) return;
+      controls = animate(rise, 1, {
+        duration: reduce ? 0.01 : 1.9,
+        ease: [0.65, 0, 0.25, 1],
+      });
+    };
+    if (document.documentElement.classList.contains("dd-entered")) enter();
+    window.addEventListener("dd:enter", enter);
+    // Belt and braces: never leave the arch closed if the cue is missed.
+    const fallback = window.setTimeout(() => {
+      if (rise.get() === 0) rise.set(1);
+    }, 9000);
+    return () => {
+      window.removeEventListener("dd:enter", enter);
+      window.clearTimeout(fallback);
+      controls?.stop();
+    };
+  }, [rise]);
 
   /** 0 = arch closed, 1 = arch fully past us. */
   const openness = useTransform(scrollYProgress, (p) =>
     Math.min(1, Math.max(0, p / PORTAL_END)),
   );
 
-  /** Gentle push-in. Small enough that the photo never softens. */
-  const photoPush = useTransform(openness, [0, 1], [1.06, 1]);
+  /** Gentle push-in through the arch, then a slow settle while the curtain rises. */
+  const photoScale = useTransform([scrollYProgress, rise], ([p, r]: number[]) => {
+    const settle = 1 + 0.16 * (1 - r);
+    if (p <= PORTAL_END) return (1.06 - 0.06 * (p / PORTAL_END)) * settle;
+    return (1 + 0.08 * ((p - PORTAL_END) / (1 - PORTAL_END))) * settle;
+  });
 
-  const chromeY = useTransform(scrollYProgress, [0, at(0.04), at(0.1)], [0, -8, -140]);
-  const chromeOpacity = useTransform(scrollYProgress, [0, at(0.04), at(0.1)], [1, 1, 0]);
+  const palmsOpacity = useTransform(scrollYProgress, [0, vh(22), vh(44)], [1, 1, 0]);
+  const palmsX = useTransform(scrollYProgress, [0, vh(66)], [0, -980]);
+  const palmsScale = useTransform(scrollYProgress, [0, vh(66)], [1, 1.4]);
 
-  const palmsOpacity = useTransform(scrollYProgress, [0, at(0.06), at(0.12)], [1, 1, 0]);
-  const palmsX = useTransform(scrollYProgress, [0, at(0.18)], [0, -980]);
-  const palmsScale = useTransform(scrollYProgress, [0, at(0.18)], [1, 1.4]);
-
-  /**
-   * Title rushes toward the camera and passes behind us. It sits above the
-   * perspective origin, so the blow-up also carries it up and out of frame.
-   */
-  const titleScale = useTransform(
-    scrollYProgress,
-    [0, TITLE_PASS, 1],
-    [0.34, 0.48, 0.48],
-  );
-  const titleZ = useTransform(
-    scrollYProgress,
-    [0, TITLE_PASS, 1],
-    [0, TITLE_Z_MAX, TITLE_Z_MAX],
-  );
+  /** Title rushes toward the camera and passes behind us. */
+  const titleScale = useTransform(scrollYProgress, [0, TITLE_PASS, 1], [0.34, 0.48, 0.48]);
+  const titleZ = useTransform(scrollYProgress, [0, TITLE_PASS, 1], [0, TITLE_Z_MAX, TITLE_Z_MAX]);
   const titleOpacity = useTransform(
     scrollYProgress,
     [0, TITLE_CUT_START, TITLE_PASS, 1],
@@ -305,57 +238,46 @@ export function HeroPortal() {
     [1, 1, 0, 0],
   );
 
-  const exploreOpacity = useTransform(scrollYProgress, [0, at(0.05), at(0.1)], [1, 1, 0]);
+  const exploreOpacity = useTransform(scrollYProgress, [0, vh(12), vh(30)], [1, 1, 0]);
 
-  const stackProgress = useTransform(scrollYProgress, [STACK_START, 1], [0, 1]);
-  const visitProgress = useTransform(scrollYProgress, [VISIT_START, VISIT_END], [0, 1]);
-  const tellProgress = useTransform(scrollYProgress, [TELL_START, TELL_END], [0, 1]);
-  const storyProgress = useTransform(scrollYProgress, [STORY_START, STORY_END], [0, 1]);
-  /** Polaroid overlays stay on card 0 after they assemble — they recede with it. */
-  const storyOpacity = useTransform(
-    scrollYProgress,
-    [VISIT_START, VISIT_START + 0.01, 1],
-    [0, 1, 1],
-  );
+  const statementOpacity = useTransform(scrollYProgress, [0, vh(104), vh(134), 1], [0, 0, 1, 1]);
+  const statementY = useTransform(scrollYProgress, [vh(104), vh(134), 1], [36, 0, -70]);
+  const dimOpacity = useTransform(scrollYProgress, [0, vh(100), vh(140), 1], [0, 0, 1, 1]);
+  const restShadeOpacity = useTransform(scrollYProgress, [0, TITLE_PASS * 0.8, TITLE_PASS], [1, 1, 0]);
 
   /**
-   * Scroll-driven fades, applied to the DOM by hand.
-   *
-   * Framer 13.2.0 will not write `opacity` for these elements: the motion
-   * value updates correctly but the style is left at its mount value of 1, so
-   * the header, side captions and title never actually faded. Everything that
-   * looked like it disappeared was only being translated or magnified out of
-   * frame — which is why the title stayed on screen on phones, where it never
-   * grows large enough to clear the viewport.
-   *
-   * Writing these ourselves also makes them self-healing, since they ride the
-   * same reconcile loop as the arch.
+   * Scroll-driven fades, applied to the DOM by hand: framer 13 leaves
+   * `opacity` style motion values at their mount value on these elements, so
+   * they are reconciled in the frame loop below together with the arch.
    */
   const fades = useMemo(
     () =>
       [
-        [headerRef, chromeOpacity],
         [palmRef, palmsOpacity],
         [sideLeftRef, sideOpacity],
         [sideRightRef, sideOpacity],
         [titleRef, titleOpacity],
         [bookCtaRef, titleOpacity],
         [exploreRef, exploreOpacity],
-        [storyRef, storyOpacity],
+        [statementRef, statementOpacity],
+        [dimRef, dimOpacity],
+        [restShadeRef, restShadeOpacity],
       ] as const,
-    [chromeOpacity, palmsOpacity, sideOpacity, titleOpacity, exploreOpacity, storyOpacity],
+    [
+      palmsOpacity,
+      sideOpacity,
+      titleOpacity,
+      exploreOpacity,
+      statementOpacity,
+      dimOpacity,
+      restShadeOpacity,
+    ],
   );
 
-  // Drive the arch clip and the fades imperatively: no re-render per frame,
-  // and always against the current measured box.
-  //
-  // Listening to `change` alone is not enough. If a single event is dropped or
-  // coalesced the arch stays frozen at whatever it last drew — stuck wide open
-  // at the top of the page until the next scroll jolts it back. So instead of
-  // trusting events, a frame loop reconciles the DOM against the current
-  // scroll position, and re-applies if anything else overwrote a property. It
-  // idles out ~1s after motion stops and is woken by scroll/resize/visibility,
-  // so it costs nothing while the page is at rest.
+  // Drive the arch clip and the fades imperatively: no re-render per frame.
+  // A frame loop reconciles the DOM against the current scroll position (so a
+  // dropped event can never leave the arch frozen), then idles out ~1s after
+  // motion stops until scroll/resize/visibility wakes it.
   useEffect(() => {
     let raf = 0;
     let idleFrames = 0;
@@ -366,7 +288,7 @@ export function HeroPortal() {
 
       const el = overlayRef.current;
       if (el && box.w > 0 && box.h > 0) {
-        const clip = archInset(openness.get(), box.w, box.h);
+        const clip = archInset(openness.get(), box.w, box.h, rise.get());
         if (clip !== lastClip || el.style.clipPath !== lastClip) {
           lastClip = clip;
           el.style.clipPath = clip;
@@ -381,12 +303,12 @@ export function HeroPortal() {
         const next = value.get().toFixed(3);
         if (node.style.opacity !== next) {
           node.style.opacity = next;
-          if (ref === storyRef) {
-            node.style.visibility = Number(next) < 0.01 ? "hidden" : "visible";
-          }
           if (ref === bookCtaRef) {
             const btn = bookBtnRef.current;
             if (btn) btn.style.pointerEvents = Number(next) < 0.2 ? "none" : "auto";
+          }
+          if (ref === exploreRef) {
+            node.style.pointerEvents = Number(next) < 0.2 ? "none" : "auto";
           }
           changed = true;
         }
@@ -408,29 +330,21 @@ export function HeroPortal() {
     reconcile();
     wake();
 
-    const unsubscribe = openness.on("change", wake);
-    const unsubscribeStory = storyProgress.on("change", wake);
-    const unsubscribeVisit = visitProgress.on("change", wake);
-    const unsubscribeTell = tellProgress.on("change", wake);
-    const unsubscribeScroll = scrollYProgress.on("change", wake);
+    const unsubscribe = scrollYProgress.on("change", wake);
+    const unsubscribeRise = rise.on("change", wake);
     window.addEventListener("scroll", wake, { passive: true });
-    window.addEventListener("scrollend", wake);
     window.addEventListener("resize", wake);
     document.addEventListener("visibilitychange", wake);
 
     return () => {
       unsubscribe();
-      unsubscribeStory();
-      unsubscribeVisit();
-      unsubscribeTell();
-      unsubscribeScroll();
+      unsubscribeRise();
       window.removeEventListener("scroll", wake);
-      window.removeEventListener("scrollend", wake);
       window.removeEventListener("resize", wake);
       document.removeEventListener("visibilitychange", wake);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [openness, box, fades, storyProgress, visitProgress, tellProgress, scrollYProgress]);
+  }, [openness, box, fades, scrollYProgress, rise]);
 
   useEffect(() => {
     const measure = () => {
@@ -444,10 +358,9 @@ export function HeroPortal() {
         );
       }
 
-      // getBoundingClientRect includes the ancestor fly-past transform, so this
-      // is only meaningful while the title is still at rest.
+      // Only meaningful while the title is still at rest.
       const nEl = nRef.current;
-      if (!nEl || scrollYProgress.get() > at(0.02)) return;
+      if (!nEl || scrollYProgress.get() > vh(4)) return;
       const nBox = nEl.getBoundingClientRect();
       setOrigin({
         x: Math.min(62, Math.max(38, ((nBox.left + nBox.width / 2) / window.innerWidth) * 100)),
@@ -463,22 +376,19 @@ export function HeroPortal() {
     };
   }, [scrollYProgress]);
 
-  const sectionVh = SECTION_VH;
-
   return (
     <section
       id="home"
       ref={containerRef}
       className="relative bg-[var(--dd-hero-base)]"
-      style={{ height: `${sectionVh}vh` }}
+      style={{ height: `${SECTION_VH}vh` }}
     >
       <div
         ref={stickyRef}
-        className="sticky top-0 h-screen overflow-hidden bg-[var(--dd-hero-base)]"
+        className="sticky top-0 h-[100svh] overflow-hidden bg-[var(--dd-hero-base)]"
       >
-        {/* Green atmosphere. Full bleed and never clipped, so the six stacked
-            gradients and the blended palm rasterise once and are never
-            repainted — this is the expensive layer, and now it is static. */}
+        {/* Green atmosphere: full bleed and never clipped, so the stacked
+            gradients and blended palm rasterise once. */}
         <div className="dd-hero-atmosphere pointer-events-none absolute inset-0 z-[1]" aria-hidden>
           <div className="dd-hero-sky" />
           <motion.div
@@ -486,126 +396,101 @@ export function HeroPortal() {
             className="dd-hero-palms"
             style={{ x: palmsX, scale: palmsScale }}
           >
-            <Image
-              src="/images/palm-shadows.png"
-              alt=""
-              fill
-              priority
-              className="object-contain object-left-top opacity-[0.78]"
-              sizes="55vw"
+            {/* Vector shadow (scripts/palm-shadow.py) — crisp at any size. */}
+            <motion.div className="absolute inset-0" style={{ x: palmDX, y: palmDY }}>
+              <div className="dd-enter dd-enter-palm absolute inset-0">
+                <div className="dd-hero-palms-sway">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/images/palm-shadow.svg" alt="" draggable={false} />
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        </div>
+
+        {/* The arch is a window onto the photo — a plain `inset()` with
+            rounded top corners, written each frame by the loop above. */}
+        <div ref={overlayRef} className="dd-hero-arch absolute inset-0 z-[2]" data-cursor="Scroll">
+          <motion.div className="absolute inset-0" style={{ scale: photoScale }}>
+            <motion.div className="absolute inset-0 scale-[1.035]" style={{ x: photoDX, y: photoDY }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={HERO_IMAGE.src}
+              srcSet={HERO_IMAGE.srcSet}
+              sizes="100vw"
+              alt={HERO_IMAGE.alt}
+              className="absolute inset-0 h-full w-full object-cover object-[50%_46%]"
+              draggable={false}
+              decoding="sync"
+              fetchPriority="high"
             />
+            </motion.div>
           </motion.div>
-        </div>
-
-        {/* The arch is a window onto the photo rather than a hole in the wall.
-            One plain `inset()` with rounded top corners, driven by a single
-            CSS variable, so there is no path geometry, no even-odd hole and
-            nothing for Safari or mobile to disagree about. */}
-        <div ref={overlayRef} className="dd-hero-arch absolute inset-0 z-[2]">
-          {/* `isolate` keeps every card inside this stacking context. */}
-          <motion.div className="absolute inset-0 isolate" style={{ scale: photoPush }}>
-            {/* Surface the cards sit on once they start stacking. Near-black,
-                not the hero green, so a receding card reads as a card on a
-                dark table rather than as green bars torn out of the hero. */}
-            <div className="absolute inset-0 bg-[#060f0d]" aria-hidden />
-            {STACK_CARDS.map((card, index) => (
-              <StackCardLayer
-                key={card.id}
-                card={card}
-                index={index}
-                segments={STACK_SEGMENTS}
-                progress={stackProgress}
-              >
-                {index === 0 ? (
-                  <div
-                    ref={storyRef}
-                    className="absolute inset-0 z-[1]"
-                    style={{ opacity: 0, visibility: "hidden" }}
-                  >
-                    <MysuruVisit progress={visitProgress} />
-                    <HotelTell progress={tellProgress} />
-                    <MysuruStory progress={storyProgress} />
-                  </div>
-                ) : null}
-              </StackCardLayer>
-            ))}
-          </motion.div>
-        </div>
-
-        <motion.header
-          ref={headerRef}
-          style={{ y: chromeY }}
-          className="absolute inset-x-0 top-0 z-30 flex items-start justify-between px-5 pb-4 pt-5 md:px-10 lg:px-14"
-        >
-          <a
-            href="#home"
-            className="relative block h-[58px] w-[230px] shrink-0 md:h-[72px] md:w-[300px]"
-            style={{
-              filter:
-                "drop-shadow(0 3px 6px rgba(0,0,0,0.45)) drop-shadow(0 8px 18px rgba(0,0,0,0.28))",
-            }}
+          {/* Seats the title on the bright haze while the arch is closed;
+              lifts away as we travel through. */}
+          <div
+            ref={restShadeRef}
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_42%_at_50%_34%,rgba(6,22,19,0.5)_0%,rgba(6,22,19,0.18)_60%,transparent_100%)]"
+            aria-hidden
+          />
+          <div
+            ref={dimRef}
+            className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(6,22,19,0.5)_0%,rgba(6,22,19,0.28)_45%,rgba(6,22,19,0.6)_100%)]"
+            style={{ opacity: 0 }}
+            aria-hidden
+          />
+          <motion.div
+            ref={statementRef}
+            style={{ y: statementY, opacity: 0 }}
+            className="pointer-events-none absolute inset-x-0 top-[12%] z-[3] px-[var(--dd-gutter)] text-center md:top-[11%]"
           >
-            <Image
-              src="/images/logo.png"
-              alt="Deccan Dwell — Home away from home"
-              fill
-              priority
-              className="object-contain object-left"
-              sizes="300px"
-            />
-          </a>
-
-          <nav className="absolute left-1/2 top-7 hidden -translate-x-1/2 items-center gap-7 lg:flex">
-            {NAV.map((item, i) => (
-              <a
-                key={item.label}
-                href={item.href}
-                className={`font-[family-name:var(--font-nav)] text-[11px] uppercase tracking-[0.22em] text-[var(--dd-cream)] transition hover:text-[var(--dd-gold)] ${
-                  i === 0
-                    ? "border-b border-[var(--dd-gold)] pb-1 text-[var(--dd-gold)]"
-                    : ""
-                }`}
-              >
-                {item.label}
-              </a>
-            ))}
-          </nav>
-
-          <div className="flex items-center pt-1">
-            <ProfileMenu />
-          </div>
-        </motion.header>
+            <p className="dd-eyebrow dd-eyebrow--plain justify-center text-[var(--dd-cream)]/85">
+              Chamundi Hills · Mysuru
+            </p>
+            <p className="dd-display mx-auto mt-6 max-w-[14ch] text-[var(--dd-cream)] [text-shadow:0_2px_40px_rgba(0,0,0,0.35)]">
+              Where the city <em className="!text-[var(--dd-cream)]">slows</em> down.
+            </p>
+          </motion.div>
+        </div>
 
         <motion.div
           ref={sideLeftRef}
           style={{ x: sideLeftX, scale: sideScale }}
-          className="pointer-events-none absolute bottom-[14%] left-6 z-20 origin-bottom-left md:left-10 lg:left-14"
+          className="pointer-events-none absolute bottom-[14%] left-[var(--dd-gutter)] z-20 hidden origin-bottom-left sm:block"
         >
-          <p className="font-[family-name:var(--font-display)] text-2xl text-[var(--dd-gold)] md:text-3xl">
+          <motion.div style={{ x: sideDX }}>
+          <div className="dd-enter dd-enter-up dd-delay-6">
+          <p className="font-[family-name:var(--font-display)] text-3xl italic text-[var(--dd-gold)]">
             01
           </p>
           <div className="my-3 h-px w-10 bg-[var(--dd-gold)]/70" />
-          <p className="max-w-[8rem] font-[family-name:var(--font-nav)] text-[10px] uppercase leading-relaxed tracking-[0.2em] text-[var(--dd-cream)] md:text-[11px]">
-            Spacious stays
+          <p className="max-w-[9rem] font-[family-name:var(--font-nav)] text-[10.5px] uppercase leading-relaxed tracking-[0.22em] text-[var(--dd-cream)]">
+            Rooms &amp;
             <br />
-            Modern
+            three-bedroom
             <br />
-            Comforts
+            suites
           </p>
+          </div>
+          </motion.div>
         </motion.div>
 
         <motion.div
           ref={sideRightRef}
           style={{ x: sideRightX, scale: sideScale }}
-          className="pointer-events-none absolute bottom-[14%] right-6 z-20 origin-bottom-right text-right md:right-10 lg:right-14"
+          className="pointer-events-none absolute bottom-[14%] right-[var(--dd-gutter)] z-20 hidden origin-bottom-right text-right sm:block"
         >
-          <p className="font-[family-name:var(--font-display)] text-2xl text-[var(--dd-gold)] md:text-3xl">
+          <motion.div style={{ x: sideDX }}>
+          <div className="dd-enter dd-enter-up dd-delay-7">
+          <p className="font-[family-name:var(--font-display)] text-3xl italic text-[var(--dd-gold)]">
             02
           </p>
-          <div className="ml-auto my-3 h-px w-10 bg-[var(--dd-gold)]/70" />
-          <p className="ml-auto max-w-[9rem] font-[family-name:var(--font-nav)] text-[10px] uppercase leading-relaxed tracking-[0.2em] text-[var(--dd-cream)] md:text-[11px]">
+          <div className="my-3 ml-auto h-px w-10 bg-[var(--dd-gold)]/70" />
+          <p className="ml-auto max-w-[10rem] font-[family-name:var(--font-nav)] text-[10.5px] uppercase leading-relaxed tracking-[0.22em] text-[var(--dd-cream)]">
             At the foothills of Chamundi Hills
           </p>
+          </div>
+          </motion.div>
         </motion.div>
 
         <div
@@ -625,8 +510,9 @@ export function HeroPortal() {
               transformStyle: "preserve-3d",
               backfaceVisibility: "hidden",
             }}
-            className="absolute left-1/2 top-[32%] w-[min(220vw,2400px)] will-change-transform"
+            className="absolute left-1/2 top-[34%] w-[min(220vw,2400px)] will-change-transform"
           >
+            <motion.div style={{ x: titleDX, y: titleDY }}>
             <svg
               viewBox="0 0 900 280"
               className="h-auto w-full overflow-visible"
@@ -637,7 +523,7 @@ export function HeroPortal() {
                 <filter id="dd-title-pop" x="-40%" y="-50%" width="180%" height="220%">
                   <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="blur" />
                   <feOffset in="blur" dy="3" result="off" />
-                  <feFlood floodColor="#1a1814" floodOpacity="0.32" result="tint" />
+                  <feFlood floodColor="#0b1f1a" floodOpacity="0.55" result="tint" />
                   <feComposite in="tint" in2="off" operator="in" result="shadow" />
                   <feMerge>
                     <feMergeNode in="shadow" />
@@ -646,30 +532,32 @@ export function HeroPortal() {
                 </filter>
               </defs>
               <text
+                className="dd-enter dd-enter-track dd-delay-2"
                 x="450"
                 y="48"
                 textAnchor="middle"
-                fill="#c5a059"
+                fill="#f3eee4"
                 filter="url(#dd-title-pop)"
                 style={{
                   fontFamily: "var(--font-nav), DM Sans, sans-serif",
-                  fontSize: "24px",
-                  letterSpacing: "0.45em",
+                  fontSize: "22px",
+                  letterSpacing: "0.55em",
                 }}
               >
                 MYSURU
               </text>
               <text
+                className="dd-enter dd-enter-title dd-delay-3"
                 x="450"
                 y="155"
                 textAnchor="middle"
-                fill="#efe4c8"
+                fill="#f3eee4"
                 filter="url(#dd-title-pop)"
                 style={{
                   fontFamily: "var(--font-display), Cormorant Garamond, serif",
-                  fontSize: "118px",
-                  fontWeight: 500,
-                  letterSpacing: "0.03em",
+                  fontSize: "122px",
+                  fontWeight: 400,
+                  letterSpacing: "0.01em",
                 }}
               >
                 Decca
@@ -679,20 +567,23 @@ export function HeroPortal() {
                 {" Dwell"}
               </text>
               <text
+                className="dd-enter dd-enter-up dd-delay-5"
                 x="450"
-                y="235"
+                y="232"
                 textAnchor="middle"
-                fill="#c5a059"
+                fill="#efe4c8"
                 filter="url(#dd-title-pop)"
                 style={{
-                  fontFamily: "var(--font-nav), DM Sans, sans-serif",
-                  fontSize: "20px",
-                  letterSpacing: "0.35em",
+                  fontFamily: "var(--font-display), Cormorant Garamond, serif",
+                  fontStyle: "italic",
+                  fontSize: "30px",
+                  letterSpacing: "0.04em",
                 }}
               >
-                HOME AWAY FROM HOME
+                a home away from home
               </text>
             </svg>
+            </motion.div>
           </motion.div>
           <motion.div
             ref={bookCtaRef}
@@ -703,180 +594,51 @@ export function HeroPortal() {
               transformStyle: "preserve-3d",
               backfaceVisibility: "hidden",
             }}
-            className="absolute bottom-[18%] left-1/2 origin-center will-change-transform md:bottom-[15%]"
+            className="absolute bottom-[19%] left-1/2 origin-center will-change-transform md:bottom-[16%]"
           >
             <a
               ref={bookBtnRef}
               href="#book"
-              className="pointer-events-auto cursor-pointer whitespace-nowrap border border-[#c5a059] px-16 py-8 font-[family-name:var(--font-nav)] text-[42px] uppercase tracking-[0.28em] text-[#efe4c8] transition hover:bg-[#c5a059] hover:text-[#024d43]"
-              style={{
-                filter:
-                  "drop-shadow(0 3px 6px rgba(26,24,20,0.32)) drop-shadow(0 8px 18px rgba(26,24,20,0.2))",
-              }}
+              data-magnetic
+              className="dd-enter dd-enter-up dd-delay-6 pointer-events-auto block cursor-pointer whitespace-nowrap border border-[#c5a059] bg-[rgba(6,22,19,0.5)] px-16 py-8 font-[family-name:var(--font-nav)] text-[38px] uppercase tracking-[0.32em] text-[#f3eee4] backdrop-blur-[6px] transition-colors duration-500 hover:bg-[#c5a059] hover:text-[#0b2a24]"
             >
-              Book Your Stay
+              Reserve your stay
             </a>
           </motion.div>
         </div>
 
         <div
           ref={exploreRef}
-          className="absolute bottom-8 left-0 right-0 z-30 flex items-end justify-between px-6 md:px-10 lg:px-14"
+          className="absolute inset-x-0 bottom-7 z-30 flex items-end justify-between px-[var(--dd-gutter)]"
         >
-          <div className="flex items-center gap-4 text-[var(--dd-cream)]">
-            <a href="https://instagram.com" aria-label="Instagram" className="transition hover:text-[var(--dd-gold)]">
-              <IconInstagram />
-            </a>
-            <a href="https://facebook.com" aria-label="Facebook" className="transition hover:text-[var(--dd-gold)]">
-              <IconFacebook />
-            </a>
-            <a href="#contact" aria-label="Location" className="transition hover:text-[var(--dd-gold)]">
-              <IconPin />
-            </a>
-          </div>
+          <p className="dd-enter dd-enter-fade dd-delay-8 hidden font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.3em] text-[var(--dd-cream)]/70 md:block">
+            Mysuru · Karnataka
+          </p>
 
           <a
-            href="#rooms"
-            className="absolute bottom-2 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2 text-[var(--dd-cream)]"
+            href="#welcome"
+            className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[var(--dd-cream)]"
           >
-            <span className="font-[family-name:var(--font-nav)] text-[9px] uppercase tracking-[0.35em]">
-              Explore
+            <span className="dd-enter dd-enter-up dd-delay-8 flex flex-col items-center gap-3"
+          >
+            <span className="font-[family-name:var(--font-nav)] text-[9.5px] uppercase tracking-[0.38em] text-[var(--dd-cream)]/80">
+              Scroll
             </span>
-            <span className="flex h-11 w-11 items-center justify-center rounded-full border border-white/80">
+            <span className="relative block h-12 w-px overflow-hidden bg-[var(--dd-cream)]/20">
               <motion.span
-                animate={{ y: [0, 4, 0] }}
-                transition={{ repeat: Infinity, duration: 1.6, ease: "easeInOut" }}
-                className="text-lg leading-none"
-              >
-                ↓
-              </motion.span>
+                className="absolute inset-x-0 top-0 h-1/2 bg-[var(--dd-gold)]"
+                animate={{ y: ["-100%", "200%"] }}
+                transition={{ repeat: Infinity, duration: 2.2, ease: [0.76, 0, 0.24, 1] }}
+              />
+            </span>
             </span>
           </a>
 
-          <p className="font-[family-name:var(--font-nav)] text-[10px] tracking-[0.25em] text-[var(--dd-cream)]">
-            01 ——— 03
+          <p className="dd-enter dd-enter-fade dd-delay-8 hidden font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.3em] text-[var(--dd-cream)]/70 md:block">
+            Chamundi Hills Road
           </p>
         </div>
       </div>
     </section>
-  );
-}
-
-function StackCardLayer({
-  card,
-  index,
-  segments,
-  progress,
-  children,
-}: {
-  card: StackCard;
-  index: number;
-  segments: number;
-  progress: MotionValue<number>;
-  children?: ReactNode;
-}) {
-  const enterStart = (index - 1) / segments;
-  const enterEnd = index / segments;
-  const exitStart = index / segments;
-  const exitEnd = (index + 1) / segments;
-  const isLast = index === segments;
-
-  const y = useTransform(
-    progress,
-    index === 0 ? [0, 1] : [enterStart, enterEnd, 1],
-    index === 0 ? ["0%", "0%"] : ["100%", "0%", "0%"],
-  );
-
-  // Card-stack recede: the outgoing card shrinks, tilts and rounds off, so it
-  // reads as a card being laid down while the next one slides over it. The
-  // exposed margin is the dark surface behind the stack, never the hero green,
-  // and it only ever happens after the arch has fully settled.
-  const scale = useTransform(
-    progress,
-    isLast ? [0, 1] : [exitStart, exitEnd],
-    isLast ? [1, 1] : [1, 0.88],
-  );
-
-  const rotate = useTransform(
-    progress,
-    isLast ? [0, 1] : [exitStart, exitEnd],
-    isLast ? [0, 0] : [0, 2.5],
-  );
-
-  const radius = useTransform(
-    progress,
-    isLast ? [0, 1] : [exitStart, exitEnd],
-    isLast ? ["0px", "0px"] : ["0px", "26px"],
-  );
-
-  const dim = useTransform(
-    progress,
-    isLast ? [0, 1] : [exitStart, exitEnd],
-    isLast ? [0, 0] : [0, 0.3],
-  );
-
-  /**
-   * A card that hasn't started sliding in yet sits at y: 100%, entirely below
-   * the fold. Left visible it would still be painted and given its own
-   * compositor layer — five full-bleed images at DPR 2 is on the order of 70MB
-   * of layer memory, all of it dead weight during the arch animation.
-   *
-   * `visibility: hidden` drops it from paint and compositing while still
-   * keeping its image loaded and decoded, so nothing pops when it appears. The
-   * flip happens the instant the card starts moving, while it is still fully
-   * off-screen, so it can never be seen.
-   */
-  const visible = useTransform(progress, (p) =>
-    index === 0 || p > enterStart + 1e-6 ? "visible" : "hidden",
-  );
-  // Only hint the compositor for cards that are actually in play; a permanent
-  // hint on every card is what forces all those layers to exist at once.
-  const willChange = useTransform(visible, (v) => (v === "visible" ? "transform" : "auto"));
-
-  return (
-    <motion.div
-      className="absolute inset-0 overflow-hidden shadow-[0_28px_70px_-20px_rgba(0,0,0,0.75)]"
-      style={{
-        y,
-        scale,
-        rotate,
-        borderRadius: radius,
-        zIndex: index + 1,
-        transformOrigin: "50% 50%",
-        backfaceVisibility: "hidden",
-        visibility: visible,
-        willChange,
-      }}
-    >
-      {index === 0 ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={card.image}
-          alt={card.alt}
-          className="absolute inset-0 h-full w-full object-cover object-center"
-          draggable={false}
-          decoding="sync"
-          fetchPriority="high"
-        />
-      ) : (
-        <Image
-          src={card.image}
-          alt={card.alt}
-          fill
-          priority={index < 2}
-          quality={95}
-          sizes="100vw"
-          className="object-cover object-center"
-          draggable={false}
-        />
-      )}
-      {children}
-      {/* Depth cue for the outgoing card — replaces the shrink, so no gap. */}
-      <motion.div
-        className="pointer-events-none absolute inset-0 z-[2] bg-black"
-        style={{ opacity: dim }}
-        aria-hidden
-      />
-    </motion.div>
   );
 }

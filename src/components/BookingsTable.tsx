@@ -1,5 +1,6 @@
 "use client";
 
+import { readJson } from "@/lib/http";
 import { useState } from "react";
 import type { Booking } from "@/lib/types";
 
@@ -26,7 +27,7 @@ function GuestBookingActions({ row }: { row: Row }) {
           requestedCheckOut: mode === "date_change" ? checkOut : undefined,
         }),
       });
-      const data = await response.json();
+      const data = await readJson(response);
       if (!response.ok) throw new Error(data.error || "Could not submit request");
       setMessage("Request sent to the hotel.");
       setMode(null);
@@ -85,6 +86,8 @@ export function BookingsTable({
   const [rows, setRows] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<"all" | "upcoming" | "in_house" | "pending" | "cancelled">("all");
   const [notes, setNotes] = useState<Record<string, string>>(
     Object.fromEntries(initial.map((row) => [row.id, row.adminNote ?? ""])),
   );
@@ -98,7 +101,7 @@ export function BookingsTable({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, action, ...(action === "set_status" ? { status: value } : {}), ...(action === "note" ? { note: value } : {}) }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || "Could not update");
       setRows((current) =>
         current.map((row) => (row.id === id ? { ...row, ...data.booking } : row)),
@@ -110,6 +113,17 @@ export function BookingsTable({
     }
   }
 
+  const today = new Date().toISOString().slice(0, 10);
+  const q = query.trim().toLowerCase();
+  const visible = rows.filter((row) => {
+    if (q && !`${row.guestName} ${row.guestEmail} ${row.guestPhone} ${row.id} ${row.roomName ?? ""}`.toLowerCase().includes(q)) return false;
+    if (filter === "upcoming") return row.checkIn >= today && (row.status === "confirmed" || row.status === "pending");
+    if (filter === "in_house") return row.status === "checked_in";
+    if (filter === "pending") return row.status === "pending";
+    if (filter === "cancelled") return row.status === "cancelled" || row.status === "expired";
+    return true;
+  });
+
   if (rows.length === 0) {
     return (
       <p className="mt-10 font-[family-name:var(--font-body)] text-[var(--dd-cream)]/60">
@@ -119,10 +133,43 @@ export function BookingsTable({
   }
 
   return (
-    <div className="mt-10 overflow-x-auto">
-      {error && <p className="mb-4 text-sm text-red-300">{error}</p>}
+    <div className="mt-10">
+      {admin && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap gap-2">
+            {([
+              ["all", "All"],
+              ["upcoming", "Upcoming"],
+              ["in_house", "In house"],
+              ["pending", "Pending"],
+              ["cancelled", "Cancelled"],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setFilter(id)}
+                className={`rounded-full border px-4 py-1.5 font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.18em] transition-colors ${
+                  filter === id
+                    ? "border-[var(--dd-gold)] bg-[var(--dd-gold)] text-[var(--dd-night)]"
+                    : "border-[var(--dd-line-dark)] text-[var(--dd-cream)]/70 hover:border-[var(--dd-gold)]/60"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search guest, email, phone or booking ID"
+            className="dd-input !mt-0 w-full max-w-sm !py-2 !text-sm"
+          />
+        </div>
+      )}
+      {error && <p role="alert" className="mb-4 border-l-2 border-[#f0a493] pl-3 text-sm text-[#f0a493]">{error}</p>}
+      <div className="overflow-x-auto border border-[var(--dd-line-dark)]">
       <table className="w-full min-w-[52rem] text-left text-sm text-[var(--dd-cream)]">
-        <thead className="font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.18em] text-[var(--dd-gold)]">
+        <thead className="bg-[var(--dd-night-2)] font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.18em] text-[var(--dd-gold)] [&_th]:px-4 [&_th]:pt-4">
           <tr>
             <th className="pb-4 pr-4">Stay</th>
             <th className="pb-4 pr-4">Guest</th>
@@ -133,8 +180,15 @@ export function BookingsTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr key={row.id} className="border-t border-[var(--dd-gold)]/15">
+          {visible.length === 0 && (
+            <tr>
+              <td colSpan={admin ? 6 : 5} className="py-12 text-center text-[var(--dd-cream)]/45">
+                No bookings match this view.
+              </td>
+            </tr>
+          )}
+          {visible.map((row) => (
+            <tr key={row.id} className="border-t border-[var(--dd-line-dark)] align-top transition-colors hover:bg-[var(--dd-cream)]/[0.025] [&>td]:px-4">
               <td className="py-4 pr-4">
                 <p>{row.roomName ?? row.roomTypeId}</p>
                 <p className="text-[11px] text-[var(--dd-cream)]/45">{row.id}</p>
@@ -156,7 +210,19 @@ export function BookingsTable({
               </td>
               <td className="py-4 pr-4">₹{row.amountInr.toLocaleString("en-IN")}</td>
               <td className="py-4 pr-4">
-                {row.status}
+                <span
+                  className={`inline-block rounded-full border px-2.5 py-0.5 font-[family-name:var(--font-nav)] text-[9.5px] uppercase tracking-[0.14em] ${
+                    row.status === "confirmed"
+                      ? "border-[var(--dd-gold)]/60 text-[var(--dd-gold)]"
+                      : row.status === "checked_in"
+                        ? "border-emerald-300/50 text-emerald-200"
+                        : row.status === "pending"
+                          ? "border-amber-200/50 text-amber-100"
+                          : "border-[var(--dd-cream)]/20 text-[var(--dd-cream)]/50"
+                  }`}
+                >
+                  {row.status.replace("_", " ")}
+                </span>
                 <br />
                 <span className="text-[11px] text-[var(--dd-gold)]/80">{payLabel(row)}</span>
                 {!admin && <GuestBookingActions row={row} />}
@@ -168,7 +234,7 @@ export function BookingsTable({
                       value={row.status}
                       disabled={busy === row.id}
                       onChange={(event) => void act(row.id, "set_status", event.target.value)}
-                      className="border border-[var(--dd-gold)]/30 bg-[var(--dd-green)] px-2 py-1 text-xs"
+                      className="border border-[var(--dd-line-dark)] bg-[var(--dd-night)] px-2 py-1.5 text-xs"
                     >
                       {(["pending", "confirmed", "checked_in", "checked_out", "cancelled", "expired"] as const).map((status) => (
                         <option key={status} value={status}>{status.replace("_", " ")}</option>
@@ -210,6 +276,7 @@ export function BookingsTable({
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

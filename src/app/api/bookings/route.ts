@@ -1,3 +1,4 @@
+import { apiError } from "@/lib/api-errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
@@ -27,7 +28,7 @@ const createSchema = z.object({
   paymentMethod: z.enum(["online", "at_hotel"]).default("online"),
 });
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const body = await request.json().catch(() => null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {
@@ -101,5 +102,14 @@ export async function POST(request: Request) {
       },
       { status: 502 },
     );
+  }
+}
+
+// Every handler answers in JSON, even when something unexpected fails.
+export async function POST(...args: Parameters<typeof handlePOST>) {
+  try {
+    return await handlePOST(...args);
+  } catch (error) {
+    return apiError(error);
   }
 }

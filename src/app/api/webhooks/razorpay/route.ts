@@ -1,3 +1,4 @@
+import { apiError } from "@/lib/api-errors";
 import { NextResponse } from "next/server";
 import { confirmBooking, getBookingById, getBookingByOrderId } from "@/lib/inventory";
 import { verifyWebhookSignature } from "@/lib/razorpay";
@@ -11,7 +12,7 @@ type RazorpayPaymentEntity = {
   notes?: { bookingId?: string };
 };
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const rawBody = await request.text();
   const signature = request.headers.get("x-razorpay-signature") ?? "";
   if (!verifyWebhookSignature(rawBody, signature)) {
@@ -58,4 +59,13 @@ export async function POST(request: Request) {
     await sendBookingConfirmation(result.booking);
   }
   return NextResponse.json({ ok: true, bookingId: result.booking.id });
+}
+
+// Every handler answers in JSON, even when something unexpected fails.
+export async function POST(...args: Parameters<typeof handlePOST>) {
+  try {
+    return await handlePOST(...args);
+  } catch (error) {
+    return apiError(error);
+  }
 }

@@ -1,3 +1,4 @@
+import { apiError } from "@/lib/api-errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { confirmBooking, getBookingById } from "@/lib/inventory";
@@ -13,7 +14,7 @@ const schema = z.object({
   razorpay_signature: z.string().min(8),
 });
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const body = await request.json().catch(() => null);
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
@@ -47,4 +48,13 @@ export async function POST(request: Request) {
 
   const email = await sendBookingConfirmation(result.booking);
   return NextResponse.json({ booking: result.booking, email });
+}
+
+// Every handler answers in JSON, even when something unexpected fails.
+export async function POST(...args: Parameters<typeof handlePOST>) {
+  try {
+    return await handlePOST(...args);
+  } catch (error) {
+    return apiError(error);
+  }
 }

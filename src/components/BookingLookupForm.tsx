@@ -1,5 +1,6 @@
 "use client";
 
+import { readJson } from "@/lib/http";
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
@@ -17,7 +18,7 @@ export function BookingLookupForm() {
     try {
       const query = new URLSearchParams({ bookingId, email });
       const response = await fetch(`/api/bookings/lookup?${query}`);
-      const data = await response.json();
+      const data = await readJson(response);
       if (!response.ok) throw new Error(data.error || "Could not find booking");
       router.push(`/booking/${data.booking.id}?email=${encodeURIComponent(email)}`);
     } catch (err) {

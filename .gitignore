@@ -49,3 +49,10 @@ prisma/dev.db
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local helper
+start-dev.command
+setup-db.command
+setup-db.log
+push.command
+push.log

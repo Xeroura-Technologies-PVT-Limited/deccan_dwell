@@ -1,9 +1,10 @@
+import { apiError } from "@/lib/api-errors";
 import { NextResponse } from "next/server";
 import { expireStaleHolds } from "@/lib/inventory";
 
 export const runtime = "nodejs";
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const configuredSecret = process.env.CRON_SECRET;
   const authorization = request.headers.get("authorization");
   if (!configuredSecret && process.env.NODE_ENV === "production") {
@@ -15,4 +16,13 @@ export async function GET(request: Request) {
 
   await expireStaleHolds();
   return NextResponse.json({ ok: true });
+}
+
+// Every handler answers in JSON, even when something unexpected fails.
+export async function GET(...args: Parameters<typeof handleGET>) {
+  try {
+    return await handleGET(...args);
+  } catch (error) {
+    return apiError(error);
+  }
 }

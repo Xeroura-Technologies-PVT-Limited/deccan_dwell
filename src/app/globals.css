@@ -143,6 +143,21 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   );
 }
 
+/* Before the entrance the arch is closed down to its sill (JS takes over
+   after hydration and raises it). */
+html:not(.dd-entered) .dd-hero-arch {
+  clip-path: inset(95% calc(50% - var(--arch-w) / 2) 5% calc(50% - var(--arch-w) / 2));
+}
+
+@media (max-width: 767px) {
+  .dd-hero-arch {
+    clip-path: inset(
+      max(5%, 104px) calc(50% - var(--arch-w) / 2) 5% calc(50% - var(--arch-w) / 2) round
+        calc(var(--arch-w) / 2) calc(var(--arch-w) / 2) 0px 0px
+    );
+  }
+}
+
 .dd-hero-sky {
   position: absolute;
   inset: 0;
@@ -157,27 +172,73 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 }
 
 .dd-hero-palms {
-  /* Must stay positioned: the palm uses next/image `fill`, so without this it
-     resolves its containing block to the wall instead of this box, and snaps
-     the moment a scroll transform appears. */
+  /* The SVG's viewBox is fitted to every frond tip (see scripts/palm-shadow.py),
+     so nothing is ever sliced by its edge; 1.197 keeps the frond scale. */
   position: absolute;
-  left: -4%;
-  top: -2%;
-  width: min(52vw, 560px);
-  height: 108%;
+  left: -3%;
+  top: -3%;
+  width: calc(min(60vw, 700px) * 1.197);
+  height: 112%;
   pointer-events: none;
   mix-blend-mode: multiply;
+  opacity: 0.8;
   transform-origin: left center;
   backface-visibility: hidden;
 }
 
+/* A slow breeze through the fronds — compositor-only rotation. */
+.dd-hero-palms-sway {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0% 0%;
+  animation: dd-palm-sway 11s ease-in-out infinite alternate;
+}
+
+.dd-hero-palms-sway img {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+}
+
+@keyframes dd-palm-sway {
+  0% {
+    transform: rotate(-0.8deg) translate3d(0, 0, 0);
+  }
+  50% {
+    transform: rotate(0.9deg) translate3d(6px, -4px, 0);
+  }
+  100% {
+    transform: rotate(-0.3deg) translate3d(-3px, 3px, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dd-hero-palms-sway {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Intro — one CSS timeline, played start to finish.
+   JS only locks scroll, adds `.is-leaving` for the exit, and unmounts.
+   ------------------------------------------------------------------ */
 html.dd-introing,
 html.dd-introing body {
   overflow: hidden !important;
 }
 
+/* Returning visitors (same tab session), deep links and ?intro=0 never see
+   the overlay — set by an inline script before first paint. */
+html.dd-no-intro .dd-intro {
+  display: none;
+}
+
 .dd-intro {
-  --dd-intro-logo-w: min(77.4vw, 756px);
+  --dd-intro-logo-w: min(72vw, 700px);
+  --dd-intro-word-w: calc(var(--dd-intro-logo-w) * 369 / 979);
+  --dd-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dd-ease-inout: cubic-bezier(0.76, 0, 0.24, 1);
 
   position: fixed;
   inset: 0;
@@ -185,17 +246,42 @@ html.dd-introing body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--dd-hero-base);
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 45%, #0a3a33 0%, transparent 70%),
+    var(--dd-hero-base);
   cursor: pointer;
-  opacity: 1;
-  visibility: visible;
-  transition: opacity 0.72s ease, visibility 0.72s ease;
+  touch-action: manipulation;
+  will-change: transform;
 }
 
-.dd-intro--bye {
-  opacity: 0;
-  visibility: hidden;
+.dd-intro.is-leaving {
+  animation: dd-intro-lift 1s var(--dd-ease-inout) 0.18s forwards;
   pointer-events: none;
+}
+
+.dd-intro-stage {
+  position: relative;
+}
+
+.dd-intro.is-leaving .dd-intro-stage {
+  animation: dd-intro-stage-out 0.6s cubic-bezier(0.5, 0, 0.75, 0) forwards;
+}
+
+/* A fine gold edge rides the bottom of the lifting curtain. */
+.dd-intro::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--dd-gold) 30%, var(--dd-gold) 70%, transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease 0.2s;
+}
+
+.dd-intro.is-leaving::after {
+  opacity: 0.9;
 }
 
 .dd-intro-lockup {
@@ -205,26 +291,6 @@ html.dd-introing body {
   justify-content: center;
   width: var(--dd-intro-logo-w);
   height: calc(var(--dd-intro-logo-w) * 390 / 979);
-  opacity: 0;
-  animation: dd-intro-in 0.55s ease 0.06s forwards;
-  will-change: transform;
-}
-
-.dd-intro--open .dd-intro-lockup,
-.dd-intro--bye .dd-intro-lockup {
-  transform: translateY(0) scale(1);
-  transition: transform 1.2s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-@keyframes dd-intro-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(1.16);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1.16);
-  }
 }
 
 .dd-intro-slice {
@@ -240,30 +306,51 @@ html.dd-introing body {
   user-select: none;
 }
 
+/* D and the house start together in the middle, rise in, then part. */
+.dd-intro-d,
+.dd-intro-mark {
+  position: relative;
+  z-index: 1;
+  opacity: 0;
+  filter: blur(8px);
+}
+
+.dd-intro-d {
+  transform: translate3d(calc(var(--dd-intro-word-w) / 2), 14px, 0);
+  animation:
+    dd-intro-rise 0.85s var(--dd-ease-out) 0.1s forwards,
+    dd-intro-split-d 1.05s cubic-bezier(0.7, 0, 0.2, 1) 0.75s forwards;
+}
+
+.dd-intro-mark {
+  transform: translate3d(calc(var(--dd-intro-word-w) / -2), 14px, 0);
+  animation:
+    dd-intro-rise-mark 0.85s var(--dd-ease-out) 0.18s forwards,
+    dd-intro-split-mark 1.05s cubic-bezier(0.7, 0, 0.2, 1) 0.75s forwards;
+}
+
+/* ECCAN / WELL is unmasked from the centre outwards as the pieces part. */
 .dd-intro-word {
-  width: 0;
+  width: var(--dd-intro-word-w);
   overflow: hidden;
   flex-shrink: 0;
   height: calc(var(--dd-intro-logo-w) * 294 / 979);
-  transition: width 1.2s cubic-bezier(0.22, 1, 0.36, 1);
+  clip-path: inset(0 50% 0 50%);
+  animation: dd-intro-unmask 1.05s cubic-bezier(0.7, 0, 0.2, 1) 0.78s forwards;
 }
 
 .dd-intro-word .dd-intro-slice {
-  width: calc(var(--dd-intro-logo-w) * 369 / 979) !important;
+  width: var(--dd-intro-word-w) !important;
 }
 
-.dd-intro--open .dd-intro-word,
-.dd-intro--bye .dd-intro-word {
-  width: calc(var(--dd-intro-logo-w) * 369 / 979);
-}
-
+/* Tagline and ornament are "written" left to right. */
 .dd-intro-tag {
   position: absolute;
   inset: 0;
   overflow: hidden;
   pointer-events: none;
-  opacity: 0;
-  transform: translateY(10px);
+  clip-path: inset(75.4% 100% 0 0);
+  animation: dd-intro-write 0.9s cubic-bezier(0.45, 0, 0.2, 1) 1.45s forwards;
 }
 
 .dd-intro-tag img {
@@ -271,39 +358,146 @@ html.dd-introing body {
   width: var(--dd-intro-logo-w);
   height: calc(var(--dd-intro-logo-w) * 390 / 979);
   max-width: none;
-  clip-path: inset(75.4% 0 0 0);
   user-select: none;
 }
 
-.dd-intro--open .dd-intro-tag,
-.dd-intro--bye .dd-intro-tag {
-  opacity: 1;
-  transform: translateY(0);
-  transition:
-    opacity 0.8s ease 1.15s,
-    transform 0.8s cubic-bezier(0.22, 1, 0.36, 1) 1.15s;
+.dd-intro-rule {
+  position: absolute;
+  left: 50%;
+  bottom: calc(-1 * clamp(36px, 7vh, 64px));
+  width: 72px;
+  height: 1px;
+  translate: -50% 0;
+  background: color-mix(in oklab, var(--dd-gold) 70%, transparent);
+  transform: scaleX(0);
+  animation: dd-intro-rule 1.2s var(--dd-ease-out) 0.9s forwards;
+}
+
+.dd-intro-hint {
+  position: absolute;
+  bottom: clamp(20px, 4vh, 36px);
+  left: 50%;
+  translate: -50% 0;
+  font-family: var(--font-nav), sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--dd-cream) 45%, transparent);
+  opacity: 0;
+  animation: dd-intro-fade 0.8s ease 1.4s forwards;
+}
+
+@keyframes dd-intro-rise {
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate3d(calc(var(--dd-intro-word-w) / 2), 0, 0);
+  }
+}
+
+@keyframes dd-intro-rise-mark {
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate3d(calc(var(--dd-intro-word-w) / -2), 0, 0);
+  }
+}
+
+@keyframes dd-intro-split-d {
+  from {
+    opacity: 1;
+    transform: translate3d(calc(var(--dd-intro-word-w) / 2), 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes dd-intro-split-mark {
+  from {
+    opacity: 1;
+    transform: translate3d(calc(var(--dd-intro-word-w) / -2), 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes dd-intro-unmask {
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes dd-intro-write {
+  to {
+    clip-path: inset(75.4% 0 0 0);
+  }
+}
+
+@keyframes dd-intro-rule {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes dd-intro-fade {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dd-intro-stage-out {
+  to {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translate3d(0, -14px, 0) scale(1.04);
+  }
+}
+
+@keyframes dd-intro-lift {
+  to {
+    transform: translate3d(0, -100%, 0);
+  }
 }
 
 @media (max-width: 640px) {
   .dd-intro {
-    --dd-intro-logo-w: min(82.8vw, 468px);
+    --dd-intro-logo-w: min(84vw, 468px);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dd-intro-lockup,
+  .dd-intro-d,
+  .dd-intro-mark,
   .dd-intro-word,
   .dd-intro-tag,
-  .dd-intro--open .dd-intro-lockup,
-  .dd-intro--open .dd-intro-tag {
+  .dd-intro-rule,
+  .dd-intro-hint {
     animation: none;
-    transition: none;
     opacity: 1;
     transform: none;
+    clip-path: none;
   }
 
-  .dd-intro-word {
-    width: calc(var(--dd-intro-logo-w) * 369 / 979);
+  .dd-intro-tag {
+    clip-path: inset(75.4% 0 0 0);
+  }
+
+  .dd-intro.is-leaving {
+    animation: dd-intro-fade-out 0.5s ease forwards;
+  }
+
+  .dd-intro.is-leaving .dd-intro-stage {
+    animation: none;
+  }
+}
+
+@keyframes dd-intro-fade-out {
+  to {
+    opacity: 0;
   }
 }
 
@@ -349,6 +543,68 @@ html.dd-introing body {
   line-height: 1.15;
   text-align: center;
   color: #3b2a16;
+}
+
+.dd-places {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+.dd-places-wash {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 88% 78% at 50% 52%, transparent 42%, rgba(4, 17, 14, 0.14) 100%);
+}
+
+.dd-places-polaroid {
+  position: absolute;
+  left: 0;
+  top: 0;
+  margin: 0;
+  transform-origin: center center;
+  will-change: transform, opacity;
+}
+
+.dd-places .dd-polaroid {
+  width: min(46vw, 200px);
+}
+
+.dd-places .dd-polaroid--hotel {
+  width: min(50vw, 228px);
+}
+
+.dd-places-caption {
+  position: absolute;
+  left: 50%;
+  bottom: 8%;
+  z-index: 9;
+  width: min(92vw, 28rem);
+  translate: -50% 0;
+  text-align: center;
+  font-family: var(--font-nav), sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--dd-gold);
+}
+
+@media (min-width: 768px) {
+  .dd-places-caption {
+    font-size: 11px;
+    letter-spacing: 0.34em;
+    bottom: 7%;
+  }
+
+  .dd-places .dd-polaroid {
+    width: min(22vw, 248px);
+  }
+
+  .dd-places .dd-polaroid--hotel {
+    width: min(24vw, 276px);
+  }
 }
 
 .dd-visit {
@@ -687,4 +943,809 @@ html.dd-introing body {
     background: var(--dd-hero-base);
     color: var(--dd-cream);
   }
+}
+@layer components {
+/* ==================================================================
+   Deccan Dwell — editorial design system
+   Deep green + gold for night sections, warm paper for day sections.
+   ================================================================== */
+:root {
+  --dd-paper: #f4eee3;
+  --dd-paper-2: #ebe2d2;
+  --dd-night: #0b2a24;
+  --dd-night-2: #0f332c;
+  --dd-text-ink: #13302a;
+  --dd-gold-ink: #85662b;
+  --dd-line-dark: color-mix(in oklab, var(--dd-gold) 24%, transparent);
+  --dd-line-light: color-mix(in oklab, #13302a 14%, transparent);
+  --dd-gutter: clamp(20px, 5vw, 56px);
+  --dd-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --dd-header-h: 76px;
+}
+
+/* Lenis */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis:not(.lenis-autoToggle).lenis-stopped {
+  overflow: clip;
+}
+.lenis [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}
+
+.dd-container {
+  width: min(100% - 2 * var(--dd-gutter), 1240px);
+  margin-inline: auto;
+}
+
+.dd-section {
+  padding-block: clamp(96px, 12vw, 176px);
+}
+
+.dd-night {
+  background: var(--dd-night);
+  color: var(--dd-cream);
+}
+
+.dd-paper {
+  position: relative;
+  background: var(--dd-paper);
+  color: var(--dd-text-ink);
+}
+
+.dd-paper-2 {
+  position: relative;
+  background: var(--dd-paper-2);
+  color: var(--dd-text-ink);
+}
+
+/* Fine paper grain — static, so it rasterises once. */
+.dd-grain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.3 0 0 0 0 0.2 0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  border-radius: inherit;
+  z-index: 1;
+}
+
+/* The curtain that rises over the pinned hero — a low dome echoing the arch. */
+.dd-curtain {
+  border-top-left-radius: 50% clamp(44px, 8vw, 132px);
+  border-top-right-radius: 50% clamp(44px, 8vw, 132px);
+}
+
+/* Arch-topped frame: radii clamp to half the width, so any portrait box
+   becomes a true semicircular arch. */
+.dd-arch {
+  border-radius: 1000px 1000px 0 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.dd-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--font-nav), sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--dd-gold);
+}
+
+.dd-eyebrow::before {
+  content: "";
+  width: 28px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.7;
+}
+
+.dd-eyebrow--plain::before {
+  display: none;
+}
+
+.dd-paper .dd-eyebrow,
+.dd-paper-2 .dd-eyebrow {
+  color: var(--dd-gold-ink);
+}
+
+.dd-display,
+.dd-h2,
+.dd-h3 {
+  font-family: var(--font-display), Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+}
+
+.dd-display {
+  font-size: clamp(2.5rem, 5.4vw, 5.25rem);
+  line-height: 1.04;
+}
+
+.dd-h2 {
+  font-size: clamp(2.3rem, 4.6vw, 4.25rem);
+  line-height: 1.05;
+}
+
+.dd-h3 {
+  font-size: clamp(1.85rem, 2.8vw, 2.6rem);
+  line-height: 1.1;
+}
+
+.dd-display em,
+.dd-h2 em,
+.dd-h3 em {
+  font-style: italic;
+  color: var(--dd-gold);
+}
+
+.dd-paper :is(.dd-display, .dd-h2, .dd-h3) em,
+.dd-paper-2 :is(.dd-display, .dd-h2, .dd-h3) em {
+  color: var(--dd-gold-ink);
+}
+
+.dd-lead {
+  font-family: var(--font-body), sans-serif;
+  font-weight: 300;
+  font-size: clamp(1.05rem, 1.25vw, 1.2rem);
+  line-height: 1.75;
+  color: color-mix(in oklab, currentColor 78%, transparent);
+  text-wrap: pretty;
+}
+
+.dd-body {
+  font-family: var(--font-body), sans-serif;
+  font-weight: 300;
+  font-size: 15.5px;
+  line-height: 1.75;
+  color: color-mix(in oklab, currentColor 74%, transparent);
+  text-wrap: pretty;
+}
+
+.dd-meta {
+  font-family: var(--font-nav), sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+/* Buttons — hairline frames that fill from the left on hover. */
+.dd-btn {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 52px;
+  padding: 0 30px;
+  overflow: hidden;
+  border: 1px solid var(--dd-btn-line, var(--dd-gold));
+  color: var(--dd-btn-fg, var(--dd-cream));
+  font-family: var(--font-nav), sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: color 0.55s var(--dd-ease), border-color 0.55s var(--dd-ease);
+  cursor: pointer;
+}
+
+.dd-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--dd-btn-fill, var(--dd-gold));
+  transform: scaleX(0);
+  transform-origin: right center;
+  transition: transform 0.6s var(--dd-ease);
+}
+
+.dd-btn:hover::before,
+.dd-btn:focus-visible::before {
+  transform: scaleX(1);
+  transform-origin: left center;
+}
+
+.dd-btn:hover,
+.dd-btn:focus-visible {
+  color: var(--dd-btn-fg-hover, var(--dd-night));
+}
+
+.dd-btn:disabled,
+.dd-btn[aria-disabled="true"] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.dd-btn--solid {
+  --dd-btn-line: var(--dd-gold);
+  --dd-btn-fg: var(--dd-night);
+  --dd-btn-fill: var(--dd-cream);
+  background: var(--dd-gold);
+}
+
+.dd-btn--ink {
+  --dd-btn-line: var(--dd-text-ink);
+  --dd-btn-fg: var(--dd-paper);
+  --dd-btn-fill: var(--dd-gold-ink);
+  --dd-btn-fg-hover: var(--dd-paper);
+  background: var(--dd-text-ink);
+}
+
+.dd-btn--line-ink {
+  --dd-btn-line: color-mix(in oklab, var(--dd-text-ink) 55%, transparent);
+  --dd-btn-fg: var(--dd-text-ink);
+  --dd-btn-fill: var(--dd-text-ink);
+  --dd-btn-fg-hover: var(--dd-paper);
+}
+
+.dd-btn--sm {
+  min-height: 42px;
+  padding: 0 20px;
+  font-size: 10px;
+}
+
+.dd-btn .dd-arrow {
+  transition: transform 0.6s var(--dd-ease);
+}
+
+.dd-btn:hover .dd-arrow {
+  transform: translateX(4px);
+}
+
+/* Text link with a drawn underline. */
+.dd-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 6px;
+  font-family: var(--font-nav), sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+}
+
+.dd-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.45;
+  transform-origin: left center;
+  transition: transform 0.6s var(--dd-ease), opacity 0.3s;
+}
+
+.dd-link:hover::after {
+  opacity: 1;
+  animation: dd-link-redraw 0.7s var(--dd-ease);
+}
+
+.dd-link--quiet::after {
+  opacity: 1;
+  transform: scaleX(0);
+  transform-origin: right center;
+}
+
+.dd-link--quiet:hover::after {
+  animation: none;
+  transform: scaleX(1);
+  transform-origin: left center;
+}
+
+@keyframes dd-link-redraw {
+  0% {
+    transform: scaleX(1);
+    transform-origin: right center;
+  }
+  45% {
+    transform: scaleX(0);
+    transform-origin: right center;
+  }
+  46% {
+    transform-origin: left center;
+  }
+  100% {
+    transform: scaleX(1);
+    transform-origin: left center;
+  }
+}
+
+.dd-rule {
+  height: 1px;
+  background: var(--dd-line-dark);
+}
+
+.dd-paper .dd-rule,
+.dd-paper-2 .dd-rule {
+  background: var(--dd-line-light);
+}
+
+/* Form fields on paper */
+.dd-field {
+  display: block;
+}
+
+.dd-field-label {
+  display: block;
+  font-family: var(--font-nav), sans-serif;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--dd-gold-ink);
+}
+
+.dd-input {
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px 0;
+  border: 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--dd-text-ink) 22%, transparent);
+  background: transparent;
+  font-family: var(--font-body), sans-serif;
+  font-size: 16px;
+  color: var(--dd-text-ink);
+  outline: none;
+  border-radius: 0;
+  transition: border-color 0.4s var(--dd-ease);
+}
+
+.dd-input::placeholder {
+  color: color-mix(in oklab, var(--dd-text-ink) 38%, transparent);
+}
+
+.dd-input:focus {
+  border-bottom-color: var(--dd-gold-ink);
+}
+
+.dd-night .dd-input {
+  color: var(--dd-cream);
+  border-bottom-color: color-mix(in oklab, var(--dd-cream) 24%, transparent);
+  color-scheme: dark;
+}
+
+.dd-night .dd-input:focus {
+  border-bottom-color: var(--dd-gold);
+}
+
+.dd-night .dd-field-label {
+  color: var(--dd-gold);
+}
+
+select.dd-input {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%2385662b' stroke-width='1.2'%3E%3Cpath d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 2px center;
+  padding-right: 24px;
+}
+
+/* Disclosure */
+.dd-details summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.dd-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.dd-details .dd-plus {
+  transition: transform 0.5s var(--dd-ease);
+}
+
+.dd-details[open] .dd-plus {
+  transform: rotate(45deg);
+}
+
+/* Horizontal scroller (mobile carousels) */
+.dd-scroller {
+  scrollbar-width: none;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--dd-gutter);
+  -webkit-overflow-scrolling: touch;
+}
+
+.dd-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.dd-scroller > * {
+  scroll-snap-align: start;
+}
+
+:focus-visible {
+  outline: 1px solid var(--dd-gold);
+  outline-offset: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dd-btn::before,
+  .dd-link::after {
+    transition: none;
+  }
+}
+}
+
+/* ==================================================================
+   Signature motion
+   ================================================================== */
+
+/* Hero entrance — the initial state holds until <html> gets `dd-entered`
+   (added as the intro curtain lifts), then everything eases into place. */
+.dd-enter {
+  transition:
+    opacity 1.3s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 1.6s cubic-bezier(0.16, 1, 0.3, 1),
+    letter-spacing 2s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+
+html:not(.dd-entered) .dd-enter-fade {
+  opacity: 0;
+}
+
+html:not(.dd-entered) .dd-enter-up {
+  opacity: 0;
+  transform: translate3d(0, 26px, 0);
+}
+
+html:not(.dd-entered) .dd-enter-title {
+  opacity: 0;
+  transform: translate3d(0, 34px, 0) scale(0.97);
+}
+
+html:not(.dd-entered) .dd-enter-track {
+  opacity: 0;
+  letter-spacing: 1.2em !important;
+}
+
+html:not(.dd-entered) .dd-enter-palm {
+  opacity: 0;
+  transform: translate3d(-10%, -4%, 0) rotate(-3deg);
+}
+
+html:not(.dd-entered) .dd-enter-down {
+  opacity: 0;
+  transform: translate3d(0, -18px, 0);
+}
+
+.dd-enter-palm {
+  transform-origin: 0 0;
+  transition-duration: 2.2s, 2.6s;
+}
+
+.dd-delay-1 { transition-delay: 0.1s; }
+.dd-delay-2 { transition-delay: 0.45s; }
+.dd-delay-3 { transition-delay: 0.6s; }
+.dd-delay-4 { transition-delay: 0.75s; }
+.dd-delay-5 { transition-delay: 0.9s; }
+.dd-delay-6 { transition-delay: 1.05s; }
+.dd-delay-7 { transition-delay: 1.15s; }
+.dd-delay-8 { transition-delay: 1.35s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dd-enter {
+    transition-duration: 0.01s !important;
+    transition-delay: 0s !important;
+  }
+}
+
+/* Custom cursor (desktop pointers only — enabled by JS). */
+html.dd-has-cursor,
+html.dd-has-cursor * {
+  cursor: none !important;
+}
+
+html.dd-has-cursor :is(input, textarea, select, [contenteditable="true"]) {
+  cursor: auto !important;
+}
+
+.dd-cursor {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 100;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.dd-cursor-dot,
+.dd-cursor-ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 999px;
+  transition:
+    width 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+    height 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+    margin 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.3s ease,
+    background-color 0.4s ease,
+    border-color 0.4s ease;
+}
+
+.dd-cursor-dot {
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  background: #f3eee4;
+}
+
+.dd-cursor-ring {
+  width: 38px;
+  height: 38px;
+  margin: -19px 0 0 -19px;
+  border: 1px solid rgba(243, 238, 228, 0.7);
+}
+
+.dd-cursor[data-mode="link"] .dd-cursor-ring {
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  background: rgba(243, 238, 228, 0.12);
+  border-color: rgba(243, 238, 228, 0.9);
+}
+
+.dd-cursor[data-mode="link"] .dd-cursor-dot,
+.dd-cursor[data-mode="label"] .dd-cursor-dot,
+.dd-cursor[data-mode="label"] .dd-cursor-ring {
+  opacity: 0;
+}
+
+.dd-cursor[data-hidden="true"] {
+  opacity: 0;
+}
+
+.dd-cursor-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 92px;
+  height: 92px;
+  margin: -46px 0 0 -46px;
+  border-radius: 999px;
+  background: var(--dd-cream);
+  color: var(--dd-night);
+  font-family: var(--font-nav), sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  transform: scale(0);
+  transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dd-cursor[data-mode="label"] .dd-cursor-label {
+  transform: scale(1);
+}
+
+/* Velocity marquee */
+.dd-marquee-track {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+}
+
+.dd-marquee-item {
+  display: inline-flex;
+  align-items: center;
+  gap: clamp(28px, 4vw, 64px);
+  padding-right: clamp(28px, 4vw, 64px);
+  font-family: var(--font-display), Georgia, serif;
+  font-style: italic;
+  font-weight: 300;
+  font-size: clamp(3rem, 8.5vw, 8rem);
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.dd-marquee-outline {
+  color: transparent;
+  -webkit-text-stroke: 1px color-mix(in oklab, var(--dd-gold) 85%, transparent);
+}
+
+.dd-marquee-star {
+  font-style: normal;
+  font-size: 0.32em;
+  color: var(--dd-gold);
+}
+
+/* Cursor on the cream sections: ink instead of cream. */
+.dd-cursor[data-tone="light"] .dd-cursor-dot {
+  background: var(--dd-text-ink);
+}
+
+.dd-cursor[data-tone="light"] .dd-cursor-ring {
+  border-color: color-mix(in oklab, var(--dd-text-ink) 70%, transparent);
+}
+
+.dd-cursor[data-tone="light"][data-mode="link"] .dd-cursor-ring {
+  background: color-mix(in oklab, var(--dd-text-ink) 10%, transparent);
+  border-color: var(--dd-text-ink);
+}
+
+.dd-cursor[data-tone="light"] .dd-cursor-label {
+  background: var(--dd-text-ink);
+  color: var(--dd-paper);
+}
+
+.dd-cursor-dot,
+.dd-cursor-ring,
+.dd-cursor-label {
+  transition-property: width, height, margin, opacity, background-color, border-color, color, transform;
+}
+
+/* Booking calendar: arrival / departure discs pop in. */
+.dd-pop {
+  animation: dd-pop 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dd-pop {
+  0% {
+    transform: scale(0.6);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+
+/* Gold-foil glint: a band of light passes once across the finished logo,
+   masked to the artwork so only the gold lines catch it. */
+.dd-intro-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    rgba(255, 246, 220, 0.95) 48%,
+    rgba(255, 236, 190, 0.6) 52%,
+    transparent 65%
+  );
+  background-size: 300% 100%;
+  background-position: 120% 0;
+  -webkit-mask: url("/images/logo.png") 0 0 / 100% 100% no-repeat;
+  mask: url("/images/logo.png") 0 0 / 100% 100% no-repeat;
+  mix-blend-mode: screen;
+  animation: dd-intro-sheen 1s cubic-bezier(0.45, 0, 0.2, 1) 1.7s forwards;
+}
+
+@keyframes dd-intro-sheen {
+  to {
+    background-position: -20% 0;
+  }
+}
+
+/* Background glow breathes in as the mark assembles. */
+.dd-intro::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 45% 40% at 50% 47%, rgba(197, 160, 89, 0.1), transparent 70%);
+  opacity: 0;
+  animation: dd-intro-fade 1.6s ease 0.4s forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dd-intro-sheen,
+  .dd-intro::before {
+    animation: none;
+  }
+  .dd-intro-d,
+  .dd-intro-mark {
+    filter: none;
+  }
+}
+
+/* ——— Booking confirmation: printed receipt ——— */
+@layer components {
+  .dd-ticket-shadow {
+    filter: drop-shadow(0 26px 30px rgba(0, 0, 0, 0.45)) drop-shadow(0 2px 2px rgba(0, 0, 0, 0.2));
+  }
+  /* Torn zig-zag edges top and bottom. */
+  .dd-ticket-paper {
+    --zz: 9px;
+    -webkit-mask:
+      conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / calc(2 * var(--zz)) 51% repeat-x,
+      conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / calc(2 * var(--zz)) 51% repeat-x;
+    mask:
+      conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / calc(2 * var(--zz)) 51% repeat-x,
+      conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / calc(2 * var(--zz)) 51% repeat-x;
+    background-image:
+      linear-gradient(180deg, rgba(19, 48, 42, 0.06), transparent 14%, transparent 86%, rgba(19, 48, 42, 0.05)),
+      repeating-linear-gradient(0deg, rgba(19, 48, 42, 0.018) 0 1px, transparent 1px 3px);
+  }
+  .dd-ticket-rule {
+    height: 1px;
+    background-image: linear-gradient(90deg, rgba(19, 48, 42, 0.45) 50%, transparent 50%);
+    background-size: 7px 1px;
+  }
+  .dd-ticket-stamp {
+    display: grid;
+    place-items: center;
+    padding: 10px 16px 8px;
+    border: 2.5px solid currentColor;
+    border-radius: 6px;
+    outline: 1px solid currentColor;
+    outline-offset: 3px;
+    font-family: var(--font-nav), sans-serif;
+    text-transform: uppercase;
+    line-height: 1;
+    opacity: 0.85;
+    mix-blend-mode: multiply;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -2.2 2.1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -2.2 2.1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .dd-ticket-stamp span {
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+  }
+  .dd-ticket-stamp small {
+    margin-top: 5px;
+    font-size: 7.5px;
+    letter-spacing: 0.3em;
+  }
+  .dd-ticket-stamp--gold { color: #8a6a26; }
+  .dd-ticket-stamp--muted { color: #4b5d58; }
+  .dd-ticket-stamp--alert { color: #9b2d20; }
+
+  /* The printer's status light blinks while it prints, then settles. */
+  .dd-ticket-led {
+    box-shadow: 0 0 10px 2px rgba(197, 160, 89, 0.7);
+    animation: dd-ticket-blink 0.32s steps(2, jump-none) 0.9s 8, dd-ticket-glow 2.4s ease-in-out 3.7s infinite;
+  }
+  @keyframes dd-ticket-blink {
+    0% { opacity: 1; }
+    100% { opacity: 0.25; }
+  }
+  @keyframes dd-ticket-glow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dd-ticket-led { animation: none; }
+}
+
+@media print {
+  body { background: #fff !important; }
+  body * { visibility: hidden !important; }
+  .dd-ticket-paper, .dd-ticket-paper * { visibility: visible !important; }
+  .dd-ticket-paper {
+    position: fixed !important;
+    left: 50%;
+    top: 0;
+    width: 340px;
+    transform: translateX(-50%);
+    -webkit-mask: none;
+    mask: none;
+  }
+  .dd-ticket-shadow { filter: none; transform: none !important; }
 }

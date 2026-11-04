@@ -1,9 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
 import type { CalendarDay } from "@/lib/types";
 
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 const MONTHS = [
   "January",
   "February",
@@ -36,10 +35,17 @@ function leadingBlanks(month: string) {
   return (weekday + 6) % 7;
 }
 
-function inStay(date: string, checkIn: string, checkOut: string) {
-  return Boolean(checkIn && checkOut && date >= checkIn && date < checkOut);
+function daysIn(month: string) {
+  const [year, monthNum] = month.split("-").map(Number);
+  return new Date(Date.UTC(year, monthNum, 0)).getUTCDate();
 }
 
+/**
+ * One month of the booking calendar, in the style of a hotel reservation
+ * engine: a continuous band for the stay, filled discs for arrival and
+ * departure, a gold dot for nights that are nearly gone, struck-through
+ * dates for nights that are full.
+ */
 export function AvailabilityCalendar({
   month,
   today,
@@ -47,8 +53,9 @@ export function AvailabilityCalendar({
   checkIn,
   checkOut,
   loading,
-  onMonthChange,
   onPick,
+  onPrev,
+  onNext,
 }: {
   month: string;
   today: string;
@@ -56,49 +63,51 @@ export function AvailabilityCalendar({
   checkIn: string;
   checkOut: string;
   loading: boolean;
-  onMonthChange: (month: string) => void;
   onPick: (date: string) => void;
+  onPrev?: () => void;
+  onNext?: () => void;
 }) {
-  const byDate = useMemo(() => {
-    const map = new Map<string, CalendarDay>();
-    days?.forEach((d) => map.set(d.date, d));
-    return map;
-  }, [days]);
-
+  const byDate = new Map((days ?? []).map((d) => [d.date, d]));
   const blanks = leadingBlanks(month);
-  const prevMonth = shiftMonth(month, -1);
-  const nextMonth = shiftMonth(month, 1);
-  const currentMonth = today.slice(0, 7);
-  const canGoPrev = prevMonth >= currentMonth;
+  const count = daysIn(month);
 
   return (
-    <div className="border border-[var(--dd-gold)]/25 p-4 md:p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <button
-          type="button"
-          disabled={!canGoPrev}
-          onClick={() => onMonthChange(prevMonth)}
-          className="font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.2em] text-[var(--dd-gold)] disabled:opacity-30"
-        >
-          Prev
-        </button>
-        <p className="font-[family-name:var(--font-display)] text-xl text-[var(--dd-cream)]">
+    <div>
+      <div className="mb-3 flex h-10 items-center justify-between">
+        {onPrev ? (
+          <button
+            type="button"
+            aria-label="Previous month"
+            onClick={onPrev}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--dd-line-light)] text-[var(--dd-text-ink)] transition hover:border-[var(--dd-text-ink)] disabled:opacity-25"
+          >
+            ←
+          </button>
+        ) : (
+          <span className="w-10" />
+        )}
+        <p className="font-[family-name:var(--font-display)] text-[1.45rem] text-[var(--dd-text-ink)]">
           {monthLabel(month)}
         </p>
-        <button
-          type="button"
-          onClick={() => onMonthChange(nextMonth)}
-          className="font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.2em] text-[var(--dd-gold)]"
-        >
-          Next
-        </button>
+        {onNext ? (
+          <button
+            type="button"
+            aria-label="Next month"
+            onClick={onNext}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--dd-line-light)] text-[var(--dd-text-ink)] transition hover:border-[var(--dd-text-ink)]"
+          >
+            →
+          </button>
+        ) : (
+          <span className="w-10" />
+        )}
       </div>
 
-      <div className="grid grid-cols-7 gap-1 text-center">
+      <div className="grid grid-cols-7 text-center">
         {WEEKDAYS.map((d) => (
           <span
             key={d}
-            className="pb-2 font-[family-name:var(--font-nav)] text-[9px] uppercase tracking-[0.16em] text-[var(--dd-gold)]/70"
+            className="pb-2 font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.16em] text-[var(--dd-text-ink)]/45"
           >
             {d}
           </span>
@@ -106,53 +115,47 @@ export function AvailabilityCalendar({
         {Array.from({ length: blanks }).map((_, i) => (
           <span key={`pad-${i}`} />
         ))}
-        {(days ?? []).map((day) => {
-          const past = day.date < today;
-          const selectedStart = day.date === checkIn;
-          const selectedEnd = checkOut ? day.date === checkOut : false;
-          const stay = inStay(day.date, checkIn, checkOut);
-          const disabled = past || (day.soldOut && !selectedEnd);
+        {Array.from({ length: count }).map((_, i) => {
+          const date = `${month}-${String(i + 1).padStart(2, "0")}`;
+          const day = byDate.get(date);
+          const past = date < today;
+          const isStart = date === checkIn;
+          const isEnd = !!checkOut && date === checkOut;
+          const inRange = !!checkIn && !!checkOut && date > checkIn && date < checkOut;
+          const full = day?.soldOut ?? false;
+          const few = !!day && !full && day.remaining <= 2;
+          const disabled = past || loading || (full && !(checkIn && !checkOut && date > checkIn));
+          const band =
+            (isStart && checkOut) || isEnd || inRange
+              ? `bg-[var(--dd-text-ink)]/[0.07] ${isStart ? "rounded-l-full" : ""} ${isEnd ? "rounded-r-full" : ""}`
+              : "";
           return (
-            <button
-              key={day.date}
-              type="button"
-              disabled={disabled || loading}
-              onClick={() => onPick(day.date)}
-              className={`flex min-h-[3.4rem] flex-col items-center justify-center rounded-sm px-0.5 py-1 transition ${
-                selectedStart || selectedEnd
-                  ? "bg-[var(--dd-gold)] text-[var(--dd-green)]"
-                  : stay
-                    ? "bg-[var(--dd-gold)]/20"
-                    : "hover:bg-white/5"
-              } ${past ? "pointer-events-none opacity-25" : ""} ${
-                disabled && !past ? "cursor-not-allowed opacity-35" : ""
-              }`}
-            >
-              <span className="font-[family-name:var(--font-display)] text-base leading-none">
-                {Number(day.date.slice(8))}
-              </span>
-              {!past && (
-                <span
-                  className={`mt-1 font-[family-name:var(--font-nav)] text-[8px] uppercase tracking-[0.08em] ${
-                    selectedStart || selectedEnd
-                      ? "text-[var(--dd-green)]"
-                      : day.soldOut
-                        ? "text-red-300/80"
-                        : "text-[var(--dd-gold)]"
-                  }`}
-                >
-                  {day.soldOut ? "Full" : `${day.remaining} left`}
-                </span>
-              )}
-            </button>
+            <div key={date} className={`py-0.5 ${band}`}>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onPick(date)}
+                aria-pressed={isStart || isEnd}
+                aria-label={`${date}${full ? ", fully booked" : few ? `, ${day?.remaining} left` : ""}`}
+                className={`relative mx-auto flex aspect-square w-full max-w-[2.6rem] flex-col items-center justify-center rounded-full font-[family-name:var(--font-display)] text-[1rem] transition-colors duration-300 ${
+                  isStart || isEnd
+                    ? "dd-pop bg-[var(--dd-text-ink)] text-[var(--dd-paper)]"
+                    : past
+                      ? "text-[var(--dd-text-ink)]/20"
+                      : full
+                        ? "text-[var(--dd-text-ink)]/30 line-through decoration-[var(--dd-text-ink)]/30"
+                        : "text-[var(--dd-text-ink)] hover:bg-[var(--dd-text-ink)]/[0.08]"
+                } disabled:cursor-not-allowed`}
+              >
+                {i + 1}
+                {few && !isStart && !isEnd && (
+                  <span className="absolute bottom-[18%] h-1 w-1 rounded-full bg-[var(--dd-gold-ink)]" />
+                )}
+              </button>
+            </div>
           );
         })}
       </div>
-      {!days && (
-        <p className="mt-3 font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.18em] text-[var(--dd-cream)]/40">
-          {loading ? "Loading calendar…" : "Pick a room to see remaining nights"}
-        </p>
-      )}
     </div>
   );
 }

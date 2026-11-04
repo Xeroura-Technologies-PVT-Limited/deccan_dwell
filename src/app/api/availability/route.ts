@@ -1,3 +1,4 @@
+import { apiError } from "@/lib/api-errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAvailability, getMonthAvailability } from "@/lib/inventory";
@@ -15,7 +16,7 @@ const monthSchema = z.object({
   roomTypeId: z.string(),
 });
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const { searchParams } = new URL(request.url);
   const month = searchParams.get("month");
   const roomTypeId = searchParams.get("roomTypeId") ?? undefined;
@@ -58,4 +59,13 @@ export async function GET(request: Request) {
 
   const availability = await getAvailability(checkIn, checkOut, parsed.data.roomTypeId);
   return NextResponse.json({ checkIn, checkOut, availability });
+}
+
+// Every handler answers in JSON, even when something unexpected fails.
+export async function GET(...args: Parameters<typeof handleGET>) {
+  try {
+    return await handleGET(...args);
+  } catch (error) {
+    return apiError(error);
+  }
 }

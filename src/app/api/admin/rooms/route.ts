@@ -1,3 +1,4 @@
+import { apiError } from "@/lib/api-errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
@@ -14,16 +15,32 @@ const roomSchema = z.object({
   totalUnits: z.number().int().min(1).optional(),
 });
 
-export async function GET() {
+async function handleGET() {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   return NextResponse.json({ rooms: await listAdminRooms() });
 }
 
-export async function PATCH(request: Request) {
+async function handlePATCH(request: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const parsed = roomSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid room details" }, { status: 400 });
   const result = await updateAdminRoom(parsed.data);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 409 });
   return NextResponse.json({ room: result.room });
+}
+
+// Every handler answers in JSON, even when something unexpected fails.
+export async function GET(...args: Parameters<typeof handleGET>) {
+  try {
+    return await handleGET(...args);
+  } catch (error) {
+    return apiError(error);
+  }
+}
+export async function PATCH(...args: Parameters<typeof handlePATCH>) {
+  try {
+    return await handlePATCH(...args);
+  } catch (error) {
+    return apiError(error);
+  }
 }

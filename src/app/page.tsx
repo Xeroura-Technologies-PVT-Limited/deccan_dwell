@@ -4,17 +4,36 @@ import { ExperienceSection } from "@/components/ExperienceSection";
 import { GallerySection } from "@/components/GallerySection";
 import { BookingSection } from "@/components/BookingSection";
 import { ContactSection, SiteFooter } from "@/components/ContactSection";
+import { SiteHeader } from "@/components/site/SiteHeader";
+import { SmoothScroll } from "@/components/site/SmoothScroll";
+import { WelcomeSection } from "@/components/site/WelcomeSection";
+import { MysuruSection } from "@/components/site/MysuruSection";
+import { Cursor } from "@/components/site/Cursor";
+import { Marquee } from "@/components/site/Marquee";
 
 export default function Home() {
   return (
-    <main>
-      <HeroPortal />
-      <RoomsSection />
-      <ExperienceSection />
-      <GallerySection />
-      <BookingSection />
-      <ContactSection />
+    <>
+      <SmoothScroll />
+      <Cursor />
+      <SiteHeader />
+      <main>
+        <HeroPortal />
+        <WelcomeSection />
+        <RoomsSection />
+        <ExperienceSection />
+        <section aria-hidden className="dd-night border-y border-[var(--dd-line-dark)] py-[clamp(28px,4vw,56px)]">
+          <Marquee
+            items={["Mysuru", "Chamundi Hills", "A home away from home", "Deccan Dwell"]}
+            className="text-[var(--dd-cream)]"
+          />
+        </section>
+        <MysuruSection />
+        <GallerySection />
+        <BookingSection />
+        <ContactSection />
+      </main>
       <SiteFooter />
-    </main>
+    </>
   );
 }

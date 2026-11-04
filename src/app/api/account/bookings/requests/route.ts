@@ -1,3 +1,4 @@
+import { apiError } from "@/lib/api-errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
@@ -13,7 +14,7 @@ const requestSchema = z.object({
   note: z.string().max(500).optional(),
 });
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
@@ -22,4 +23,13 @@ export async function POST(request: Request) {
   const result = await createBookingRequest({ ...parsed.data, userId: session.id });
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 409 });
   return NextResponse.json({ request: result.request }, { status: 201 });
+}
+
+// Every handler answers in JSON, even when something unexpected fails.
+export async function POST(...args: Parameters<typeof handlePOST>) {
+  try {
+    return await handlePOST(...args);
+  } catch (error) {
+    return apiError(error);
+  }
 }

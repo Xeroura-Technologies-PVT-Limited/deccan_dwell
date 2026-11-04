@@ -1,3 +1,4 @@
+import { apiError } from "@/lib/api-errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { loginUser, registerGuest, setSessionCookie, clearSessionCookie, getSession } from "@/lib/auth";
@@ -16,13 +17,13 @@ const registerSchema = z.object({
   password: z.string().min(8),
 });
 
-export async function GET() {
+async function handleGET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ user: null });
   return NextResponse.json({ user: session });
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const body = await request.json().catch(() => null);
   const intent = body?.intent === "register" ? "register" : "login";
 
@@ -47,7 +48,30 @@ export async function POST(request: Request) {
   return NextResponse.json({ user: result.user });
 }
 
-export async function DELETE() {
+async function handleDELETE() {
   await clearSessionCookie();
   return NextResponse.json({ ok: true });
+}
+
+// Every handler answers in JSON, even when something unexpected fails.
+export async function GET(...args: Parameters<typeof handleGET>) {
+  try {
+    return await handleGET(...args);
+  } catch (error) {
+    return apiError(error);
+  }
+}
+export async function POST(...args: Parameters<typeof handlePOST>) {
+  try {
+    return await handlePOST(...args);
+  } catch (error) {
+    return apiError(error);
+  }
+}
+export async function DELETE(...args: Parameters<typeof handleDELETE>) {
+  try {
+    return await handleDELETE(...args);
+  } catch (error) {
+    return apiError(error);
+  }
 }

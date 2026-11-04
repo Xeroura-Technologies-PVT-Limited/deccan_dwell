@@ -1,3 +1,4 @@
+import { apiError } from "@/lib/api-errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getBookingByIdAndEmail } from "@/lib/inventory";
@@ -9,7 +10,7 @@ const lookupSchema = z.object({
   email: z.string().email(),
 });
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const { searchParams } = new URL(request.url);
   const parsed = lookupSchema.safeParse({
     bookingId: searchParams.get("bookingId"),
@@ -35,4 +36,13 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({ booking });
+}
+
+// Every handler answers in JSON, even when something unexpected fails.
+export async function GET(...args: Parameters<typeof handleGET>) {
+  try {
+    return await handleGET(...args);
+  } catch (error) {
+    return apiError(error);
+  }
 }

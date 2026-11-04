@@ -52,11 +52,17 @@ function toBooking(row: {
   };
 }
 
-export async function ensureRoomTypes() {
-  for (const room of ROOM_TYPES) {
-    await prisma.roomType.upsert({
-      where: { id: room.id },
-      create: {
+let roomTypesReady: Promise<void> | null = null;
+
+/** Makes sure every catalogue room exists in the DB. Runs once per server instance. */
+export function ensureRoomTypes() {
+  roomTypesReady ??= (async () => {
+    const existing = await prisma.roomType.findMany({ select: { id: true } });
+    const have = new Set(existing.map((row) => row.id));
+    const missing = ROOM_TYPES.filter((room) => !have.has(room.id));
+    if (missing.length === 0) return;
+    await prisma.roomType.createMany({
+      data: missing.map((room) => ({
         id: room.id,
         name: room.name,
         slug: room.slug,
@@ -65,10 +71,14 @@ export async function ensureRoomTypes() {
         totalUnits: room.totalUnits,
         basePriceInr: room.basePriceInr,
         image: room.image,
-      },
-      update: {},
+      })),
+      skipDuplicates: true,
     });
-  }
+  })().catch((error) => {
+    roomTypesReady = null;
+    throw error;
+  });
+  return roomTypesReady;
 }
 
 async function managedRooms() {

@@ -1,17 +1,18 @@
+import { apiError } from "@/lib/api-errors";
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { ADMIN_STATUSES, cancelBooking, listAdminBookings, markBookingPaid, updateBookingNote, updateBookingStatus } from "@/lib/inventory";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+async function handleGET() {
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const bookings = await listAdminBookings();
   return NextResponse.json({ bookings });
 }
 
-export async function PATCH(request: Request) {
+async function handlePATCH(request: Request) {
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await request.json().catch(() => null);
@@ -33,4 +34,20 @@ export async function PATCH(request: Request) {
   const result = action === "cancel" ? await cancelBooking(id) : await markBookingPaid(id);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 409 });
   return NextResponse.json({ booking: result.booking });
+}
+
+// Every handler answers in JSON, even when something unexpected fails.
+export async function GET(...args: Parameters<typeof handleGET>) {
+  try {
+    return await handleGET(...args);
+  } catch (error) {
+    return apiError(error);
+  }
+}
+export async function PATCH(...args: Parameters<typeof handlePATCH>) {
+  try {
+    return await handlePATCH(...args);
+  } catch (error) {
+    return apiError(error);
+  }
 }

@@ -1,9 +1,10 @@
 "use client";
 
+import { readJson } from "@/lib/http";
 import { useEffect, useRef, useState } from "react";
 import type { SessionUser } from "@/lib/session";
 
-export function ProfileMenu() {
+export function ProfileMenu({ variant = "default" }: { variant?: "default" | "header" }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -11,7 +12,7 @@ export function ProfileMenu() {
   useEffect(() => {
     let cancelled = false;
     fetch("/api/auth")
-      .then((res) => res.json())
+      .then((res) => readJson(res))
       .then((data) => {
         if (!cancelled) setUser(data.user ?? null);
       })
@@ -38,6 +39,25 @@ export function ProfileMenu() {
       window.removeEventListener("keydown", onKey);
     };
   }, [open]);
+
+  if (!user && variant === "header") {
+    return (
+      <a
+        href="/login"
+        aria-label="Sign in"
+        className="group flex h-10 items-center gap-2.5 text-[var(--dd-cream)]/85 transition-colors duration-500 hover:text-[var(--dd-gold)]"
+      >
+        <svg aria-hidden viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.2">
+          <circle cx="12" cy="8.5" r="3.6" />
+          <path d="M4.8 19.6c1.3-3.3 4-5 7.2-5s5.9 1.7 7.2 5" strokeLinecap="round" />
+        </svg>
+        <span className="relative hidden font-[family-name:var(--font-nav)] text-[10.5px] font-medium uppercase tracking-[0.26em] md:block">
+          Sign in
+          <span className="absolute -bottom-1 left-0 h-px w-full origin-right scale-x-0 bg-current transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:origin-left group-hover:scale-x-100" />
+        </span>
+      </a>
+    );
+  }
 
   if (!user) {
     return (
