@@ -1776,3 +1776,28 @@ html.dd-has-cursor :is(input, textarea, select, [contenteditable="true"]) {
     backface-visibility: hidden;
   }
 }
+
+/* Phones/tablets with CSS scroll-driven animations: the hero fly-through runs
+   on the compositor, tied to the section's view timeline (see HeroPortal). */
+.dd-sda {
+  view-timeline: --dd-hero block;
+}
+.dd-sda [data-sda] {
+  animation-duration: auto;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-timeline: --dd-hero;
+  animation-range: contain 0% contain 100%;
+  will-change: transform, opacity;
+}
+.dd-sda [data-sda="frame"] { animation-name: dd-sda-frame; }
+.dd-sda [data-sda="photo"] { animation-name: dd-sda-photo; }
+.dd-sda [data-sda="palms"] { animation-name: dd-sda-palms; }
+.dd-sda [data-sda="side-l"] { animation-name: dd-sda-side-l; }
+.dd-sda [data-sda="side-r"] { animation-name: dd-sda-side-r; }
+.dd-sda [data-sda="title"] { animation-name: dd-sda-title, dd-sda-title-vis; }
+.dd-sda [data-sda="cta"] { animation-name: dd-sda-cta, dd-sda-title-vis; }
+.dd-sda [data-sda="explore"] { animation-name: dd-sda-explore, dd-sda-explore-vis; }
+.dd-sda [data-sda="statement"] { animation-name: dd-sda-statement; }
+.dd-sda [data-sda="dim"] { animation-name: dd-sda-dim; }
+.dd-sda [data-sda="rest"] { animation-name: dd-sda-rest; }

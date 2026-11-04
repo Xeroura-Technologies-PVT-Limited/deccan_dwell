@@ -124,6 +124,99 @@ function archMask(boxW: number, boxH: number) {
 
 const LITE_QUERY = "(hover: none), (max-width: 1023px)";
 
+/* ------------------------------------------------------------------
+   Compositor path (phones/tablets with CSS scroll-driven animations).
+   The same choreography as the motion values below, sampled into
+   @keyframes and attached to the section's view timeline, so the
+   browser runs it off the main thread in lock-step with the scroll.
+   ------------------------------------------------------------------ */
+function lerpStops(p: number, xs: number[], ys: number[]) {
+  if (p <= xs[0]) return ys[0];
+  for (let i = 1; i < xs.length; i++) {
+    if (p <= xs[i]) {
+      const t = (p - xs[i - 1]) / (xs[i] - xs[i - 1] || 1);
+      return ys[i - 1] + (ys[i] - ys[i - 1]) * t;
+    }
+  }
+  return ys[ys.length - 1];
+}
+
+const f3 = (n: number) => (Math.round(n * 1000) / 1000).toString();
+
+function keyframes(name: string, steps: number, frame: (p: number) => string) {
+  let out = `@keyframes ${name}{`;
+  for (let i = 0; i <= steps; i++) {
+    const p = i / steps;
+    out += `${f3(p * 100)}%{${frame(p)}}`;
+  }
+  return out + "}";
+}
+
+function heroKeyframes(boxW: number, boxH: number) {
+  const N = 60;
+  const TP = TITLE_PASS;
+  const clearAt = boxW / Math.min(Math.max(280, boxW * 0.42), 460);
+  const fadeFrom = clearAt * 1.05;
+  const fadeTo = clearAt * 1.6;
+  const titleOp = (p: number) => lerpStops(p, [0, TP * 0.42, TP * 0.72, 1], [1, 1, 0, 0]);
+  const vis = (o: number) => (o <= 0.001 ? "hidden" : "visible");
+
+  return [
+    keyframes("dd-sda-frame", N, (p) => {
+      const raw = archScale(Math.min(1, p / PORTAL_END), boxW, boxH);
+      const o = raw <= fadeFrom ? 1 : raw >= fadeTo ? 0 : 1 - (raw - fadeFrom) / (fadeTo - fadeFrom);
+      return `transform:scale(${f3(Math.min(raw, fadeTo))});opacity:${f3(o)}`;
+    }),
+    keyframes("dd-sda-photo", N, (p) => {
+      const sc = p <= PORTAL_END ? 1.06 - 0.06 * (p / PORTAL_END) : 1 + 0.08 * ((p - PORTAL_END) / (1 - PORTAL_END));
+      return `transform:scale(${f3(sc)})`;
+    }),
+    keyframes("dd-sda-palms", N, (p) => {
+      const x = lerpStops(p, [0, vh(66)], [0, -980]);
+      const sc = lerpStops(p, [0, vh(66)], [1, 1.4]);
+      const o = lerpStops(p, [0, vh(22), vh(44)], [1, 1, 0]);
+      return `transform:translateX(${f3(x)}px) scale(${f3(sc)});opacity:${f3(o)}`;
+    }),
+    keyframes("dd-sda-side-l", N, (p) => {
+      const x = lerpStops(p, [0, TP], [0, -1100]);
+      const sc = lerpStops(p, [0, TP], [1, 1.45]);
+      const o = lerpStops(p, [0, TP * 0.62, TP * 0.9], [1, 1, 0]);
+      return `transform:translateX(${f3(x)}px) scale(${f3(sc)});opacity:${f3(o)}`;
+    }),
+    keyframes("dd-sda-side-r", N, (p) => {
+      const x = lerpStops(p, [0, TP], [0, 1100]);
+      const sc = lerpStops(p, [0, TP], [1, 1.45]);
+      const o = lerpStops(p, [0, TP * 0.62, TP * 0.9], [1, 1, 0]);
+      return `transform:translateX(${f3(x)}px) scale(${f3(sc)});opacity:${f3(o)}`;
+    }),
+    keyframes("dd-sda-title", N, (p) => {
+      const z = LITE_TITLE_Z_MAX * Math.min(1, p / TP);
+      const sc = lerpStops(p, [0, TP, 1], [0.34, 0.48, 0.48]);
+      const o = titleOp(p);
+      return `transform:translate3d(calc(-50% + 0.7vw),-50%,${f3(z)}px) scale(${f3(sc)});opacity:${f3(o)}`;
+    }),
+    keyframes("dd-sda-cta", N, (p) => {
+      const z = LITE_TITLE_Z_MAX * Math.min(1, p / TP);
+      const sc = lerpStops(p, [0, TP, 1], [0.34, 0.48, 0.48]);
+      const o = titleOp(p);
+      return `transform:translate3d(-50%,0,${f3(z)}px) scale(${f3(sc)});opacity:${f3(o)}`;
+    }),
+    keyframes("dd-sda-explore", 20, (p) => `opacity:${f3(lerpStops(p, [0, vh(12), vh(30)], [1, 1, 0]))}`),
+    // Visibility can't run on the compositor, so it lives in its own (tiny,
+    // main-thread) animations; the transform/opacity ones stay fully threaded.
+    keyframes("dd-sda-title-vis", 40, (p) => `visibility:${vis(titleOp(p))}`),
+    keyframes("dd-sda-explore-vis", 20, (p) => `visibility:${vis(lerpStops(p, [0, vh(12), vh(30)], [1, 1, 0]))}`),
+    keyframes("dd-sda-statement", N, (p) => {
+      const y = lerpStops(p, [0, vh(104), vh(134), 1], [36, 36, 0, -70]);
+      const o = lerpStops(p, [0, vh(104), vh(134), 1], [0, 0, 1, 1]);
+      return `transform:translateY(${f3(y)}px);opacity:${f3(o)}`;
+    }),
+    keyframes("dd-sda-dim", 20, (p) => `opacity:${f3(lerpStops(p, [0, vh(100), vh(140), 1], [0, 0, 1, 1]))}`),
+    keyframes("dd-sda-rest", 20, (p) => `opacity:${f3(lerpStops(p, [0, TP * 0.8, TP], [1, 1, 0]))}`),
+  ].join("\n");
+}
+
+
 /**
  * The arch as an `inset()` with rounded top corners.
  *
@@ -151,8 +244,20 @@ export function HeroPortal() {
   const atmosphereRef = useRef<HTMLDivElement>(null);
   /** Phones and tablets get the compositor-only variant of the hero. */
   const liteRef = useRef(false);
+  /** CSS scroll-driven animations available: run the whole fly-through on the compositor. */
+  const sdaRef = useRef(false);
+  const [sda, setSda] = useState(false);
   useEffect(() => {
     liteRef.current = window.matchMedia(LITE_QUERY).matches;
+    const ok =
+      liteRef.current &&
+      typeof CSS !== "undefined" &&
+      CSS.supports("animation-timeline: view()") &&
+      CSS.supports("animation-range: contain 0% contain 100%");
+    if (!ok) return;
+    sdaRef.current = true;
+    const id = requestAnimationFrame(() => setSda(true));
+    return () => cancelAnimationFrame(id);
   }, []);
   const nRef = useRef<SVGTSpanElement>(null);
 
@@ -257,47 +362,54 @@ export function HeroPortal() {
   }, [rise]);
 
   /** 0 = arch closed, 1 = arch fully past us. */
-  const openness = useTransform(scrollYProgress, (p) =>
+  /**
+   * The progress every hero transform reads. When the browser runs the hero
+   * as CSS scroll-driven animations (on the compositor), this stays at 0 so
+   * nothing is written from the main thread while scrolling.
+   */
+  const progress = useTransform(scrollYProgress, (p) => (sdaRef.current ? 0 : p));
+
+  const openness = useTransform(progress, (p) =>
     Math.min(1, Math.max(0, p / PORTAL_END)),
   );
 
   /** Gentle push-in through the arch, then a slow settle while the curtain rises. */
-  const photoScale = useTransform([scrollYProgress, rise], ([p, r]: number[]) => {
+  const photoScale = useTransform([progress, rise], ([p, r]: number[]) => {
     const settle = 1 + 0.16 * (1 - r);
     if (p <= PORTAL_END) return (1.06 - 0.06 * (p / PORTAL_END)) * settle;
     return (1 + 0.08 * ((p - PORTAL_END) / (1 - PORTAL_END))) * settle;
   });
 
-  const palmsOpacity = useTransform(scrollYProgress, [0, vh(22), vh(44)], [1, 1, 0]);
-  const palmsX = useTransform(scrollYProgress, [0, vh(66)], [0, -980]);
-  const palmsScale = useTransform(scrollYProgress, [0, vh(66)], [1, 1.4]);
+  const palmsOpacity = useTransform(progress, [0, vh(22), vh(44)], [1, 1, 0]);
+  const palmsX = useTransform(progress, [0, vh(66)], [0, -980]);
+  const palmsScale = useTransform(progress, [0, vh(66)], [1, 1.4]);
 
   /** Title rushes toward the camera and passes behind us. */
-  const titleScale = useTransform(scrollYProgress, [0, TITLE_PASS, 1], [0.34, 0.48, 0.48]);
-  const titleZ = useTransform(scrollYProgress, (p) => {
+  const titleScale = useTransform(progress, [0, TITLE_PASS, 1], [0.34, 0.48, 0.48]);
+  const titleZ = useTransform(progress, (p) => {
     const zMax = liteRef.current ? LITE_TITLE_Z_MAX : TITLE_Z_MAX;
     return zMax * Math.min(1, Math.max(0, p / TITLE_PASS));
   });
-  const titleOpacity = useTransform(scrollYProgress, (p) => {
+  const titleOpacity = useTransform(progress, (p) => {
     const [a, b] = liteRef.current ? [TITLE_PASS * 0.42, TITLE_PASS * 0.72] : [TITLE_CUT_START, TITLE_PASS];
     return p <= a ? 1 : p >= b ? 0 : 1 - (p - a) / (b - a);
   });
 
-  const sideScale = useTransform(scrollYProgress, [0, TITLE_PASS, 1], [1, 1.45, 1.45]);
-  const sideLeftX = useTransform(scrollYProgress, [0, TITLE_PASS, 1], [0, -1100, -1100]);
-  const sideRightX = useTransform(scrollYProgress, [0, TITLE_PASS, 1], [0, 1100, 1100]);
+  const sideScale = useTransform(progress, [0, TITLE_PASS, 1], [1, 1.45, 1.45]);
+  const sideLeftX = useTransform(progress, [0, TITLE_PASS, 1], [0, -1100, -1100]);
+  const sideRightX = useTransform(progress, [0, TITLE_PASS, 1], [0, 1100, 1100]);
   const sideOpacity = useTransform(
-    scrollYProgress,
+    progress,
     [0, TITLE_PASS * 0.62, TITLE_PASS * 0.9, 1],
     [1, 1, 0, 0],
   );
 
-  const exploreOpacity = useTransform(scrollYProgress, [0, vh(12), vh(30)], [1, 1, 0]);
+  const exploreOpacity = useTransform(progress, [0, vh(12), vh(30)], [1, 1, 0]);
 
-  const statementOpacity = useTransform(scrollYProgress, [0, vh(104), vh(134), 1], [0, 0, 1, 1]);
-  const statementY = useTransform(scrollYProgress, [vh(104), vh(134), 1], [36, 0, -70]);
-  const dimOpacity = useTransform(scrollYProgress, [0, vh(100), vh(140), 1], [0, 0, 1, 1]);
-  const restShadeOpacity = useTransform(scrollYProgress, [0, TITLE_PASS * 0.8, TITLE_PASS], [1, 1, 0]);
+  const statementOpacity = useTransform(progress, [0, vh(104), vh(134), 1], [0, 0, 1, 1]);
+  const statementY = useTransform(progress, [vh(104), vh(134), 1], [36, 0, -70]);
+  const dimOpacity = useTransform(progress, [0, vh(100), vh(140), 1], [0, 0, 1, 1]);
+  const restShadeOpacity = useTransform(progress, [0, TITLE_PASS * 0.8, TITLE_PASS], [1, 1, 0]);
 
   /**
    * Scroll-driven fades, applied to the DOM by hand: framer 13 leaves
@@ -365,6 +477,21 @@ export function HeroPortal() {
 
     const reconcile = () => {
       let changed = false;
+
+      if (sdaRef.current) {
+        const el = overlayRef.current;
+        if (el && box.w > 0 && box.h > 0) {
+          const r = rise.get();
+          const clip = r >= 1 ? "none" : archInset(0, box.w, box.h, r);
+          if (clip !== lastClip) {
+            lastClip = clip;
+            el.style.clipPath = clip;
+            el.style.setProperty("-webkit-clip-path", clip);
+            changed = true;
+          }
+        }
+        return changed;
+      }
 
       const el = overlayRef.current;
       if (el && box.w > 0 && box.h > 0) {
@@ -455,7 +582,18 @@ export function HeroPortal() {
       document.removeEventListener("visibilitychange", wake);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [openness, box, fades, scrollYProgress, rise]);
+  }, [openness, box, fades, scrollYProgress, rise, sda]);
+
+  useEffect(() => {
+    if (!sda || box.w <= 0 || box.h <= 0) return;
+    let tag = document.getElementById("dd-hero-sda") as HTMLStyleElement | null;
+    if (!tag) {
+      tag = document.createElement("style");
+      tag.id = "dd-hero-sda";
+      document.head.appendChild(tag);
+    }
+    tag.textContent = heroKeyframes(box.w, box.h);
+  }, [sda, box]);
 
   useEffect(() => {
     const measure = () => {
@@ -491,7 +629,7 @@ export function HeroPortal() {
     <section
       id="home"
       ref={containerRef}
-      className="relative bg-[var(--dd-hero-base)]"
+      className={`relative bg-[var(--dd-hero-base)]${sda ? " dd-sda" : ""}`}
       style={{ height: `calc(var(--dd-hero-h, 100vh) * ${SECTION_VH / 100})` }}
     >
       <div
@@ -500,10 +638,11 @@ export function HeroPortal() {
       >
         {/* Green atmosphere: full bleed and never clipped, so the stacked
             gradients and blended palm rasterise once. */}
-        <div ref={atmosphereRef} className="dd-hero-atmosphere pointer-events-none absolute inset-0 z-[1]" aria-hidden>
+        <div ref={atmosphereRef} data-sda="frame" className="dd-hero-atmosphere pointer-events-none absolute inset-0 z-[1]" aria-hidden>
           <div className="dd-hero-sky" />
           <motion.div
             ref={palmRef}
+            data-sda="palms"
             className="dd-hero-palms"
             style={{ x: palmsX, scale: palmsScale }}
           >
@@ -522,7 +661,7 @@ export function HeroPortal() {
         {/* The arch is a window onto the photo — a plain `inset()` with
             rounded top corners, written each frame by the loop above. */}
         <div ref={overlayRef} className="dd-hero-arch absolute inset-0 z-[2]" data-cursor="Scroll">
-          <motion.div className="absolute inset-0" style={{ scale: photoScale }}>
+          <motion.div className="absolute inset-0" data-sda="photo" style={{ scale: photoScale }}>
             <motion.div className="absolute inset-0 scale-[1.035]" style={{ x: photoDX, y: photoDY }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -541,17 +680,20 @@ export function HeroPortal() {
               lifts away as we travel through. */}
           <div
             ref={restShadeRef}
+            data-sda="rest"
             className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_42%_at_50%_34%,rgba(6,22,19,0.5)_0%,rgba(6,22,19,0.18)_60%,transparent_100%)]"
             aria-hidden
           />
           <div
             ref={dimRef}
+            data-sda="dim"
             className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(6,22,19,0.5)_0%,rgba(6,22,19,0.28)_45%,rgba(6,22,19,0.6)_100%)]"
             style={{ opacity: 0 }}
             aria-hidden
           />
           <motion.div
             ref={statementRef}
+            data-sda="statement"
             style={{ y: statementY, opacity: 0 }}
             className="pointer-events-none absolute inset-x-0 top-[12%] z-[3] px-[var(--dd-gutter)] text-center md:top-[11%]"
           >
@@ -566,6 +708,7 @@ export function HeroPortal() {
 
         <motion.div
           ref={sideLeftRef}
+          data-sda="side-l"
           style={{ x: sideLeftX, scale: sideScale }}
           className="pointer-events-none absolute bottom-[14%] left-[var(--dd-gutter)] z-20 hidden origin-bottom-left sm:block"
         >
@@ -588,6 +731,7 @@ export function HeroPortal() {
 
         <motion.div
           ref={sideRightRef}
+          data-sda="side-r"
           style={{ x: sideRightX, scale: sideScale }}
           className="pointer-events-none absolute bottom-[14%] right-[var(--dd-gutter)] z-20 hidden origin-bottom-right text-right sm:block"
         >
@@ -613,6 +757,7 @@ export function HeroPortal() {
         >
           <motion.div
             ref={titleRef}
+            data-sda="title"
             style={{
               x: "calc(-50% + 0.7vw)",
               y: "-50%",
@@ -698,6 +843,7 @@ export function HeroPortal() {
           </motion.div>
           <motion.div
             ref={bookCtaRef}
+            data-sda="cta"
             style={{
               x: "-50%",
               scale: titleScale,
@@ -720,6 +866,7 @@ export function HeroPortal() {
 
         <div
           ref={exploreRef}
+          data-sda="explore"
           className="absolute inset-x-0 bottom-7 z-30 flex items-end justify-between px-[var(--dd-gutter)]"
         >
           <p className="dd-enter dd-enter-fade dd-delay-8 hidden font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.3em] text-[var(--dd-cream)]/70 md:block">
