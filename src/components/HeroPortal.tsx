@@ -100,6 +100,28 @@ function archScale(openness: number, boxW: number, boxH: number) {
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
+ * Phones and tablets: the surround (green sky + palms) is a stencil with the
+ * resting arch cut out of it. Travelling through the arch is then a plain
+ * `scale()` of that stencil about the arch's centre — compositor-only, no
+ * per-frame repaint — instead of re-clipping the full-screen photo.
+ */
+function archMask(boxW: number, boxH: number) {
+  const { baseW, baseH, baseR, cy } = archGeometry(boxW, boxH);
+  const x0 = round2((boxW - baseW) / 2);
+  const x1 = round2(x0 + baseW);
+  const top = round2(cy - baseH / 2);
+  const sill = round2(cy + baseH / 2);
+  const r = round2(baseR);
+  const W = Math.ceil(boxW);
+  const H = Math.ceil(boxH);
+  const hole = `M${x0} ${sill}V${round2(top + r)}A${r} ${r} 0 0 1 ${round2(x0 + r)} ${top}H${round2(x1 - r)}A${r} ${r} 0 0 1 ${x1} ${round2(top + r)}V${sill}Z`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><path fill-rule="evenodd" d="M0 0H${W}V${H}H0Z${hole}"/></svg>`;
+  return { url: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`, originY: round2(cy) };
+}
+
+const LITE_QUERY = "(hover: none), (max-width: 1023px)";
+
+/**
  * The arch as an `inset()` with rounded top corners.
  *
  * `rise` (0–1) is the entrance: the arch grows up from its threshold like a
@@ -123,6 +145,7 @@ export function HeroPortal() {
   const containerRef = useRef<HTMLDivElement>(null);
   const stickyRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const atmosphereRef = useRef<HTMLDivElement>(null);
   const nRef = useRef<SVGTSpanElement>(null);
 
   // Elements whose fade is applied by hand — see `fades` below.
@@ -304,17 +327,59 @@ export function HeroPortal() {
     let idleFrames = 0;
     let lastClip = "";
 
+    const lite = window.matchMedia(LITE_QUERY).matches;
+    let lastScale = "";
+    let lastFrameVisible = "";
+    const frame = atmosphereRef.current;
+    if (frame) {
+      if (lite && box.w > 0 && box.h > 0) {
+        const { url, originY } = archMask(box.w, box.h);
+        frame.style.setProperty("-webkit-mask-image", url);
+        frame.style.setProperty("mask-image", url);
+        frame.style.setProperty("-webkit-mask-size", "100% 100%");
+        frame.style.setProperty("mask-size", "100% 100%");
+        frame.style.transformOrigin = `50% ${originY}px`;
+        frame.style.zIndex = "3";
+        frame.style.willChange = "transform";
+      } else {
+        for (const prop of ["-webkit-mask-image", "mask-image", "-webkit-mask-size", "mask-size"]) {
+          frame.style.removeProperty(prop);
+        }
+        frame.style.transform = "";
+        frame.style.zIndex = "";
+        frame.style.willChange = "";
+        frame.style.visibility = "";
+      }
+    }
+
     const reconcile = () => {
       let changed = false;
 
       const el = overlayRef.current;
       if (el && box.w > 0 && box.h > 0) {
-        const clip = archInset(openness.get(), box.w, box.h, rise.get());
-        if (clip !== lastClip || el.style.clipPath !== lastClip) {
+        const open = openness.get();
+        const r = rise.get();
+        // Lite mode clips the photo only during the entrance; after that the
+        // scaled stencil above it does the work.
+        const clip = lite && r >= 1 ? "none" : archInset(open, box.w, box.h, r);
+        if (clip !== lastClip) {
           lastClip = clip;
           el.style.clipPath = clip;
           el.style.setProperty("-webkit-clip-path", clip);
           changed = true;
+        }
+        if (lite && frame) {
+          const scale = `scale(${archScale(open, box.w, box.h).toFixed(4)})`;
+          if (scale !== lastScale) {
+            lastScale = scale;
+            frame.style.transform = scale;
+            changed = true;
+          }
+          const visible = open >= 0.999 ? "hidden" : "visible";
+          if (visible !== lastFrameVisible) {
+            lastFrameVisible = visible;
+            frame.style.visibility = visible;
+          }
         }
       }
 
@@ -410,7 +475,7 @@ export function HeroPortal() {
       >
         {/* Green atmosphere: full bleed and never clipped, so the stacked
             gradients and blended palm rasterise once. */}
-        <div className="dd-hero-atmosphere pointer-events-none absolute inset-0 z-[1]" aria-hidden>
+        <div ref={atmosphereRef} className="dd-hero-atmosphere pointer-events-none absolute inset-0 z-[1]" aria-hidden>
           <div className="dd-hero-sky" />
           <motion.div
             ref={palmRef}

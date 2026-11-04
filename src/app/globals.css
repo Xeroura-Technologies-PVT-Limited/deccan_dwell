@@ -1772,7 +1772,7 @@ html.dd-has-cursor :is(input, textarea, select, [contenteditable="true"]) {
   .dd-hero-palms-sway {
     animation: none;
   }
-  .dd-hero-arch {
-    will-change: clip-path;
+  .dd-hero-atmosphere {
+    backface-visibility: hidden;
   }
 }
