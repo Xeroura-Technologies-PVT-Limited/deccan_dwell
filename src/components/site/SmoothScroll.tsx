@@ -14,9 +14,12 @@ import { scrollToTarget, setLenis } from "@/lib/smooth-scroll";
 export function SmoothScroll() {
   useEffect(() => {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Phones and tablets keep the browser's own momentum scrolling — it runs
+    // off the main thread and is always smoother than a JS-driven loop.
+    const touch = window.matchMedia("(pointer: coarse)").matches;
 
     let lenis: Lenis | null = null;
-    if (!reduce) {
+    if (!reduce && !touch) {
       lenis = new Lenis({
         lerp: 0.085,
         wheelMultiplier: 0.9,

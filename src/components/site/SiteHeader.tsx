@@ -75,6 +75,7 @@ const EASE_INOUT = [0.76, 0, 0.24, 1] as const;
  */
 export function SiteHeader() {
   const [mode, setMode] = useState<Mode>("top");
+  const modeRef = useRef<Mode>("top");
   const [open, setOpen] = useState(false);
   const lastY = useRef(0);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -118,10 +119,11 @@ export function SiteHeader() {
       } else if (y > 90 || delta < 0) {
         tuck.set(Math.min(1, Math.max(0, tuck.get() + delta / h)));
       }
-      setMode(() => {
-        if (y < 12) return "top";
-        return y > heroEnd ? "solid" : "clear";
-      });
+      const nextMode: Mode = y < 12 ? "top" : y > heroEnd ? "solid" : "clear";
+      if (nextMode !== modeRef.current) {
+        modeRef.current = nextMode;
+        setMode(nextMode);
+      }
       window.clearTimeout(idle);
       idle = window.setTimeout(settle, 140);
     };

@@ -45,6 +45,9 @@ const PERSPECTIVE = 1000;
  */
 const TITLE_MAGNIFICATION = 12;
 const TITLE_Z_MAX = PERSPECTIVE * (1 - 1 / TITLE_MAGNIFICATION);
+/** Phones/tablets: a shorter fly-past keeps the title's raster small, so the
+ *  first pass never stalls while the GPU re-rasterises huge text. */
+const LITE_TITLE_Z_MAX = PERSPECTIVE * (1 - 1 / 3.2);
 
 /**
  * "Mysore Palace Gate in Golden Morning Haze" — Surya Rajesh, Pexels licence.
@@ -146,6 +149,11 @@ export function HeroPortal() {
   const stickyRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const atmosphereRef = useRef<HTMLDivElement>(null);
+  /** Phones and tablets get the compositor-only variant of the hero. */
+  const liteRef = useRef(false);
+  useEffect(() => {
+    liteRef.current = window.matchMedia(LITE_QUERY).matches;
+  }, []);
   const nRef = useRef<SVGTSpanElement>(null);
 
   // Elements whose fade is applied by hand — see `fades` below.
@@ -266,12 +274,14 @@ export function HeroPortal() {
 
   /** Title rushes toward the camera and passes behind us. */
   const titleScale = useTransform(scrollYProgress, [0, TITLE_PASS, 1], [0.34, 0.48, 0.48]);
-  const titleZ = useTransform(scrollYProgress, [0, TITLE_PASS, 1], [0, TITLE_Z_MAX, TITLE_Z_MAX]);
-  const titleOpacity = useTransform(
-    scrollYProgress,
-    [0, TITLE_CUT_START, TITLE_PASS, 1],
-    [1, 1, 0, 0],
-  );
+  const titleZ = useTransform(scrollYProgress, (p) => {
+    const zMax = liteRef.current ? LITE_TITLE_Z_MAX : TITLE_Z_MAX;
+    return zMax * Math.min(1, Math.max(0, p / TITLE_PASS));
+  });
+  const titleOpacity = useTransform(scrollYProgress, (p) => {
+    const [a, b] = liteRef.current ? [TITLE_PASS * 0.42, TITLE_PASS * 0.72] : [TITLE_CUT_START, TITLE_PASS];
+    return p <= a ? 1 : p >= b ? 0 : 1 - (p - a) / (b - a);
+  });
 
   const sideScale = useTransform(scrollYProgress, [0, TITLE_PASS, 1], [1, 1.45, 1.45]);
   const sideLeftX = useTransform(scrollYProgress, [0, TITLE_PASS, 1], [0, -1100, -1100]);
@@ -349,6 +359,7 @@ export function HeroPortal() {
         frame.style.zIndex = "";
         frame.style.willChange = "";
         frame.style.visibility = "";
+        frame.style.opacity = "";
       }
     }
 
@@ -369,13 +380,27 @@ export function HeroPortal() {
           changed = true;
         }
         if (lite && frame) {
-          const scale = `scale(${archScale(open, box.w, box.h).toFixed(4)})`;
+          // Once the arch's sides have cleared the screen only slivers of the
+          // surround remain: fade it out early and stop growing it, so the
+          // layer is never rasterised at a huge scale.
+          const raw = archScale(open, box.w, box.h);
+          const clearAt = box.w / Math.min(Math.max(280, box.w * 0.42), 460);
+          const fadeFrom = clearAt * 1.05;
+          const fadeTo = clearAt * 1.6;
+          const s = Math.min(raw, fadeTo);
+          const scale = `scale(${s.toFixed(4)})`;
           if (scale !== lastScale) {
             lastScale = scale;
             frame.style.transform = scale;
             changed = true;
           }
-          const visible = open >= 0.999 ? "hidden" : "visible";
+          const op = raw <= fadeFrom ? 1 : raw >= fadeTo ? 0 : 1 - (raw - fadeFrom) / (fadeTo - fadeFrom);
+          const opStr = op.toFixed(3);
+          if (frame.style.opacity !== opStr) {
+            frame.style.opacity = opStr;
+            changed = true;
+          }
+          const visible = op <= 0 ? "hidden" : "visible";
           if (visible !== lastFrameVisible) {
             lastFrameVisible = visible;
             frame.style.visibility = visible;
