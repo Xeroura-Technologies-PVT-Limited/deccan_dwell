@@ -60,3 +60,5 @@ vercel-production.env
 .desk-task
 push.sh
 Claude outputs/
+netinfo.sh
+.devip

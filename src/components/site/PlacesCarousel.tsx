@@ -6,7 +6,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export type Place = { name: string; distance: string; note: string; image: string; position: string };
 
-const SPRING = { type: "spring", stiffness: 210, damping: 30, mass: 0.9 } as const;
+/** One calm, decisive glide per move — no bounce, no rush. */
+const SPRING = { type: "tween", duration: 0.8, ease: [0.32, 0.72, 0, 1] } as const;
 const mod = (n: number, m: number) => ((n % m) + m) % m;
 
 /**
@@ -28,7 +29,8 @@ export function PlacesCarousel({ places }: { places: Place[] }) {
   /** null until the gesture shows its direction; vertical swipes scroll the page instead. */
   const axis = useRef<"x" | "y" | null>(null);
   const still = useReducedMotion() ?? false;
-  const step = cardW * 0.84;
+  // Cards sit a full width apart: one photo owns the screen, its neighbours only peek.
+  const step = cardW + 22;
 
   useEffect(() => {
     const measure = () => setCardW(Math.min(window.innerWidth * 0.66, 300));
@@ -65,8 +67,8 @@ export function PlacesCarousel({ places }: { places: Place[] }) {
         window.setTimeout(async () => {
           if (touchedRef.current) return;
           for (let i = 0; i < 2; i++) {
-            await animate(drag, -step * 0.22, { duration: 0.55, ease: [0.45, 0, 0.2, 1] });
-            await animate(drag, 0, { type: "spring", stiffness: 180, damping: 18 });
+            await animate(drag, -step * 0.14, { duration: 0.6, ease: [0.45, 0, 0.2, 1] });
+            await animate(drag, 0, { duration: 0.7, ease: [0.32, 0.72, 0, 1] });
           }
         }, 700);
         window.setTimeout(() => setHint(false), 5200);
@@ -118,7 +120,7 @@ export function PlacesCarousel({ places }: { places: Place[] }) {
           // One card per swipe: the track follows the finger up to one card,
           // then resists like a rubber band.
           const raw = panBase.current + info.offset.x;
-          const limit = step;
+          const limit = step * 0.9;
           const abs = Math.abs(raw);
           drag.set(abs <= limit ? raw : Math.sign(raw) * (limit + (abs - limit) * 0.12));
         }}
@@ -211,13 +213,13 @@ function Card({ place, offset, drag, step, width, onPick }: { place: Place; offs
   // Everything derives from the live position, so scale and light follow the finger.
   const x = useTransform(drag, (d) => offset * step + d);
   const dist = useTransform(x, (v) => Math.min(Math.abs(v) / step, 2));
-  const scale = useTransform(dist, (d) => 1 - 0.14 * Math.min(d, 1) - 0.06 * Math.max(0, d - 1));
-  const opacity = useTransform(dist, (d) => (d <= 1 ? 1 - 0.5 * d : Math.max(0, 0.5 - 0.5 * (d - 1))));
-  const y = useTransform(dist, (d) => 18 * Math.min(d, 1));
+  const scale = useTransform(dist, (d) => 1 - 0.1 * Math.min(d, 1));
+  const opacity = useTransform(dist, (d) => (d <= 1 ? 1 - 0.55 * d : Math.max(0, 0.45 - 0.45 * (d - 1))));
+  const y = useTransform(dist, (d) => 14 * Math.min(d, 1));
   const shade = useTransform(dist, (d) => Math.min(d, 1) * 0.45);
   const z = useTransform(dist, (d) => Math.round(10 - d * 4));
   // The photo drifts against the card's travel — a window onto a deeper scene.
-  const imgX = useTransform(x, (v) => -v * 0.16);
+  const imgX = useTransform(x, (v) => -v * 0.1);
   const ring = useTransform(dist, (d) => Math.max(0, 1 - d * 1.6));
 
   return (
