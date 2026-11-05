@@ -25,6 +25,8 @@ export function PlacesCarousel({ places }: { places: Place[] }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const touchedRef = useRef(false);
   const panBase = useRef(0);
+  /** null until the gesture shows its direction; vertical swipes scroll the page instead. */
+  const axis = useRef<"x" | "y" | null>(null);
   const still = useReducedMotion() ?? false;
   const step = cardW * 0.84;
 
@@ -81,12 +83,13 @@ export function PlacesCarousel({ places }: { places: Place[] }) {
   };
 
   const onDragEnd = (_: unknown, info: PanInfo) => {
-    // Distance plus a little momentum decides how many cards to travel.
-    const travel = -(drag.get() + info.velocity.x * 0.18) / step;
-    const by = Math.max(-2, Math.min(2, Math.round(travel)));
+    // Always exactly one place per swipe: far enough or fast enough moves on.
+    const d = drag.get();
+    const flick = Math.abs(info.velocity.x) > 350 ? -Math.sign(info.velocity.x) : 0;
+    const by = Math.abs(d) > step * 0.18 ? -Math.sign(d) : flick;
     if (by) {
       setIndex((i) => i + by);
-      drag.set(drag.get() + by * step);
+      drag.set(d + by * step);
     }
     animate(drag, 0, SPRING);
   };
@@ -102,14 +105,27 @@ export function PlacesCarousel({ places }: { places: Place[] }) {
         viewport={{ once: true, amount: 0.3 }}
         transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
         className="relative mx-auto cursor-grab touch-pan-y active:cursor-grabbing"
-        style={{ height: (cardW * 4) / 3 }}
-        onPanStart={() => {
+        style={{ height: (cardW * 4) / 3 + 20 }}
+        onPanStart={(_, info) => {
+          axis.current = Math.abs(info.offset.x) >= Math.abs(info.offset.y) ? "x" : "y";
+          if (axis.current !== "x") return;
           markTouched();
           drag.stop();
           panBase.current = drag.get();
         }}
-        onPan={(_, info) => drag.set(panBase.current + info.offset.x)}
-        onPanEnd={onDragEnd}
+        onPan={(_, info) => {
+          if (axis.current !== "x") return;
+          // One card per swipe: the track follows the finger up to one card,
+          // then resists like a rubber band.
+          const raw = panBase.current + info.offset.x;
+          const limit = step;
+          const abs = Math.abs(raw);
+          drag.set(abs <= limit ? raw : Math.sign(raw) * (limit + (abs - limit) * 0.12));
+        }}
+        onPanEnd={(e, info) => {
+          if (axis.current === "x") onDragEnd(e, info);
+          axis.current = null;
+        }}
       >
         {slots.map((k) => (
           <Card key={k} place={places[mod(k, n)]} offset={k - index} drag={drag} step={step} width={cardW} onPick={() => { markTouched(); go(k - index); }} />
@@ -206,7 +222,7 @@ function Card({ place, offset, drag, step, width, onPick }: { place: Place; offs
 
   return (
     <motion.figure
-      className="absolute left-1/2 top-0 m-0"
+      className="absolute left-1/2 top-[10px] m-0"
       style={{ x, y, scale, opacity, zIndex: z, width, marginLeft: -width / 2 }}
       onTap={offset !== 0 ? onPick : undefined}
     >

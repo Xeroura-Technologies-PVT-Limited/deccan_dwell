@@ -1,9 +1,24 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { readJson } from "@/lib/http";
 import type { AdminBooking, AdminRequest, AdminRoom } from "./lib";
 import { useToast } from "./ui";
+import {
+  bookingNotice,
+  chime,
+  loadMuted,
+  loadNotices,
+  loadSeenAt,
+  newWebsiteBookings,
+  primeAudio,
+  requestNotice,
+  saveMuted,
+  saveNotices,
+  saveSeenAt,
+  systemNotify,
+  type DeskNotice,
+} from "./notify";
 
 export type NewReservationPrefill = { roomTypeId?: string; checkIn?: string; checkOut?: string; block?: boolean };
 
@@ -20,6 +35,11 @@ type Desk = {
   openBooking: (id: string | null) => void;
   openId: string | null;
   newReservation: (prefill?: NewReservationPrefill) => void;
+  notices: DeskNotice[];
+  unread: number;
+  markRead: (id?: string) => void;
+  muted: boolean;
+  setMuted: (m: boolean) => void;
   draft: NewReservationPrefill | null;
   closeDraft: () => void;
 };
@@ -39,6 +59,51 @@ export function DeskProvider({ initialBookings, children }: { initialBookings: A
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
   const [draft, setDraft] = useState<NewReservationPrefill | null>(null);
+  const [notices, setNotices] = useState<DeskNotice[]>([]);
+  const [muted, setMutedState] = useState(false);
+  const mutedRef = useRef(false);
+  const noticed = useRef<Set<string> | null>(null);
+
+  /** Turn fresh data into notifications: new website bookings and guest requests. */
+  const collect = useCallback((list: AdminBooking[], reqs: AdminRequest[]) => {
+    if (!noticed.current) {
+      const stored = loadNotices();
+      noticed.current = new Set(stored.map((n) => n.id));
+      setNotices(stored);
+      const m = loadMuted();
+      mutedRef.current = m;
+      setMutedState(m);
+    }
+    let seenAt = loadSeenAt();
+    if (!seenAt) {
+      // First time this device opens the desk: start from now, no backlog.
+      seenAt = new Date().toISOString();
+      saveSeenAt(seenAt);
+    }
+    const fresh: DeskNotice[] = [];
+    for (const b of newWebsiteBookings(list, seenAt)) {
+      const n = bookingNotice(b);
+      if (!noticed.current.has(n.id)) fresh.push(n);
+    }
+    for (const r of reqs) {
+      if (r.status !== "pending" || r.createdAt <= seenAt) continue;
+      const n = requestNotice(r);
+      if (!noticed.current.has(n.id)) fresh.push(n);
+    }
+    const newest = [...list.map((b) => b.createdAt), ...reqs.map((r) => r.createdAt)].sort().pop();
+    if (newest && newest > seenAt) saveSeenAt(newest);
+    if (!fresh.length) return;
+    fresh.sort((a, b) => b.at.localeCompare(a.at));
+    for (const n of fresh) noticed.current.add(n.id);
+    setNotices((cur) => {
+      const next = [...fresh, ...cur].slice(0, 60);
+      saveNotices(next);
+      return next;
+    });
+    if (!mutedRef.current) chime();
+    fresh.slice(0, 2).forEach((n) => toast(n.title));
+    fresh.slice(0, 3).forEach(systemNotify);
+  }, [toast]);
 
   const refresh = useCallback(async () => {
     try {
@@ -50,24 +115,48 @@ export function DeskProvider({ initialBookings, children }: { initialBookings: A
       if (b.bookings) setBookings(b.bookings);
       if (r.rooms) setRooms(r.rooms);
       if (q.requests) setRequests(q.requests);
+      if (b.bookings && q.requests) {
+        collect(b.bookings, q.requests);
+      }
       const err = b.error || r.error || q.error;
       if (err) toast(err, "error");
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, collect]);
 
   useEffect(() => {
     const t = window.setTimeout(() => void refresh(), 0);
     // Keep the desk current while it is left open at reception.
-    const i = window.setInterval(() => {
-      if (document.visibilityState === "visible") void refresh();
-    }, 60_000);
+    // Check for new bookings every 20 seconds (background tabs slow this to about once a minute).
+    const i = window.setInterval(() => void refresh(), 20_000);
+    const unlock = () => primeAudio();
+    window.addEventListener("pointerdown", unlock, { once: true });
     return () => {
       window.clearTimeout(t);
       window.clearInterval(i);
+      window.removeEventListener("pointerdown", unlock);
     };
   }, [refresh]);
+
+  const unread = notices.filter((n) => !n.read).length;
+  useEffect(() => {
+    document.title = unread ? `(${unread}) Front desk · Deccan Dwell` : "Front desk · Deccan Dwell";
+  }, [unread]);
+
+  const markRead = useCallback((id?: string) => {
+    setNotices((cur) => {
+      const next = cur.map((n) => (!id || n.id === id ? { ...n, read: true } : n));
+      saveNotices(next);
+      return next;
+    });
+  }, []);
+  const setMuted = useCallback((m: boolean) => {
+    mutedRef.current = m;
+    setMutedState(m);
+    saveMuted(m);
+    if (!m) chime();
+  }, []);
 
   const roomName = useCallback((id: string) => rooms.find((r) => r.id === id)?.name ?? id, [rooms]);
 
@@ -175,10 +264,15 @@ export function DeskProvider({ initialBookings, children }: { initialBookings: A
       openBooking: setOpenId,
       openId,
       newReservation: (prefill) => setDraft(prefill ?? {}),
+      notices,
+      unread,
+      markRead,
+      muted,
+      setMuted,
       draft,
       closeDraft: () => setDraft(null),
     }),
-    [bookings, rooms, requests, loading, refresh, patchBooking, createBooking, reviewRequest, saveRoom, openId, draft],
+    [bookings, rooms, requests, loading, refresh, patchBooking, createBooking, reviewRequest, saveRoom, openId, draft, notices, unread, markRead, muted, setMuted],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

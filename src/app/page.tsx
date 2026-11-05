@@ -1,4 +1,5 @@
 import { HeroPortal } from "@/components/HeroPortal";
+import { IntroSplash } from "@/components/IntroSplash";
 import { RoomsSection } from "@/components/RoomsSection";
 import { ExperienceSection } from "@/components/ExperienceSection";
 import { GallerySection } from "@/components/GallerySection";
@@ -14,6 +15,9 @@ import { Marquee } from "@/components/site/Marquee";
 export default function Home() {
   return (
     <>
+      {/* The logo intro belongs to the homepage only — never the booking,
+          receipt, sign-in or admin pages. */}
+      <IntroSplash />
       <SmoothScroll />
       <Cursor />
       <SiteHeader />

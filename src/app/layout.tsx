@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Cormorant_Garamond, DM_Sans, Great_Vibes, Geist } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
-import { IntroSplash } from "@/components/IntroSplash";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -41,7 +40,7 @@ export const metadata: Metadata = {
  * Runs before first paint. The intro plays on every full load of the home
  * page; it is skipped on other pages and with `?intro=0`.
  */
-const INTRO_GATE = `(function(){try{var d=document.documentElement,l=location;if(l.pathname!=="/"||/[?&]intro=0(?:&|$)/.test(l.search)){d.classList.add("dd-no-intro")}d.style.setProperty("--dd-hero-h",innerHeight+"px")}catch(e){}})();`;
+const INTRO_GATE = `(function(){try{var d=document.documentElement,l=location;if(l.pathname!=="/"){d.classList.add("dd-no-intro","dd-entered")}else if(/[?&]intro=0(?:&|$)/.test(l.search)){d.classList.add("dd-no-intro")}d.style.setProperty("--dd-hero-h",innerHeight+"px")}catch(e){}})();`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
@@ -58,7 +57,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <link rel="preload" as="image" href="/images/logo.png" />
       </head>
       <body className="min-h-full">
-        <IntroSplash />
         {children}
       </body>
     </html>

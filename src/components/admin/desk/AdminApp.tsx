@@ -15,6 +15,7 @@ import { RequestsView } from "./RequestsView";
 import { ReportsView } from "./ReportsView";
 import { ReservationDrawer } from "./ReservationDrawer";
 import { NewReservationModal } from "./NewReservationModal";
+import { Bell } from "./Bell";
 
 const VIEWS = [
   { id: "today", label: "Today", icon: "M3 12l9-8 9 8M5 10v10h14V10" },
@@ -121,6 +122,7 @@ function Shell({ email }: { email: string }) {
         <div className="flex items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
           <h1 className="hidden font-[family-name:var(--font-display)] text-[26px] leading-none sm:block lg:min-w-[180px]">{title}</h1>
           <GlobalSearch />
+          <Bell />
           <Btn variant="primary" onClick={() => desk.newReservation()} className="shrink-0">
             <span className="text-[16px] leading-none">+</span>
             <span className="hidden sm:inline">New reservation</span>
