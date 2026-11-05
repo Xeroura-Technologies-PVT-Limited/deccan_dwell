@@ -25,9 +25,9 @@ export default async function BookingPage({
   if (!booking) notFound();
 
   return (
-    <main className="dd-grain relative min-h-screen overflow-hidden bg-[var(--dd-hero-base)] text-[var(--dd-cream)]">
+    <main className="dd-grain relative min-h-screen overflow-hidden bg-[var(--dd-hero-base)] text-[var(--dd-cream)] print:min-h-0 print:overflow-visible print:bg-white">
       {/* Faint palace gate behind everything */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.10]">
+      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.10] print:hidden">
         <Image src="/images/hero-gate-graded-2000.jpg" alt="" fill sizes="100vw" className="object-cover object-center" />
         <div className="absolute inset-0 bg-[linear-gradient(180deg,var(--dd-hero-base)_0%,transparent_30%,var(--dd-hero-base)_95%)]" />
       </div>
@@ -41,7 +41,7 @@ export default async function BookingPage({
         </Link>
       </header>
 
-      <div className="relative z-10 mx-auto max-w-[1240px] px-[var(--dd-gutter)] pb-24 pt-6 lg:pt-12">
+      <div className="relative z-10 mx-auto max-w-[1240px] px-[var(--dd-gutter)] pb-24 pt-6 lg:pt-12 print:p-0">
         <BookingReceipt booking={booking} />
       </div>
     </main>

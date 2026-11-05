@@ -117,8 +117,75 @@ export function BookingReceipt({ booking }: { booking: ReceiptBooking }) {
     transition: { duration: 1.1, ease: EASE, delay: 0.15 + i * 0.12 },
   });
 
+  const slipBody = (
+    <>
+                {/* Header */}
+                <div className="text-center">
+                  <span
+                    aria-hidden
+                    className="mx-auto block h-[46px] w-[150px] bg-[#13302a]"
+                    style={{ WebkitMaskImage: "url(/images/logo.png)", maskImage: "url(/images/logo.png)", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }}
+                  />
+                  <p className="mt-3 font-[family-name:var(--font-display)] text-[22px] italic leading-none tracking-normal">A home away from home</p>
+                  <p className="mt-3 text-[10.5px] leading-snug text-[#13302a]/60">
+                    Chamundi Hills Main Road, JC Nagar
+                    <br />
+                    Mysuru 570011 · {HOTEL.phones[0].label}
+                  </p>
+                </div>
+
+                <div className="dd-ticket-rule my-5" />
+                <p className="text-center text-[11px] uppercase tracking-[0.3em]">Booking receipt</p>
+                <div className="dd-ticket-rule my-5" />
+
+                <div className="space-y-0.5">
+                  <Row label="No." value={booking.id.toUpperCase()} />
+                  <Row label="Issued" value={issued} />
+                  <Row label="Guest" value={booking.guestName} />
+                </div>
+
+                <div className="dd-ticket-rule my-5" />
+
+                <div className="space-y-0.5">
+                  <Row label="Room" value={booking.roomName} />
+                  <Row label="Check-in" value={`${format(parseISO(booking.checkIn), "dd MMM")} · ${CHECK_IN_TIME}`} />
+                  <Row label="Check-out" value={`${format(parseISO(booking.checkOut), "dd MMM")} · ${CHECK_OUT_TIME}`} />
+                  <Row label="Nights" value={String(nights)} />
+                  <Row label="Guests" value={String(booking.guests)} />
+                </div>
+
+                <div className="dd-ticket-rule my-5" />
+
+                <div className="space-y-0.5">
+                  <Row label={`${booking.roomName} × ${nights}`} value={rupees(booking.amountInr)} />
+                  <Row label="Taxes & fees" value="Included" />
+                </div>
+                <div className="mt-3 border-t-2 border-[#13302a] pt-3">
+                  <Row label="Total" value={rupees(booking.amountInr)} strong />
+                  <Row label="Payment" value={paymentLabel(booking)} />
+                </div>
+
+                <div className="dd-ticket-rule my-6" />
+
+                {/* Barcode */}
+                <div className="flex h-[46px] items-stretch justify-center gap-[1.5px]" aria-hidden>
+                  {barcode(booking.id).map((w, i) => (
+                    <span key={i} className={i % 2 === 0 ? "bg-[#13302a]" : "bg-transparent"} style={{ width: w * 1.6 }} />
+                  ))}
+                </div>
+                <p className="mt-2 text-center text-[10px] tracking-[0.4em] text-[#13302a]/60">{booking.id.toUpperCase()}</p>
+
+                <p className="mt-6 text-center font-[family-name:var(--font-display)] text-[19px] italic leading-snug">
+                  Thank you, {firstName}.
+                </p>
+                <p className="text-center text-[10.5px] text-[#13302a]/55">Show this slip or your booking no. at the desk.</p>
+
+    </>
+  );
+
   return (
-    <div className="relative grid items-start gap-14 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-20">
+    <>
+    <div className="dd-print-hide relative grid items-start gap-14 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-20">
       {/* ——— Left: the welcome ——— */}
       <div className="dd-ticket-copy order-2 lg:order-1 lg:pt-10">
         <motion.p className="dd-eyebrow" {...rise(0)}>{copy.eyebrow}</motion.p>
@@ -228,67 +295,7 @@ export function BookingReceipt({ booking }: { booking: ReceiptBooking }) {
               className="dd-ticket-shadow"
             >
               <article className="dd-ticket-paper relative bg-[#fbf7ef] px-7 pb-10 pt-9 font-mono text-[12.5px] leading-[1.75] text-[#13302a]">
-                {/* Header */}
-                <div className="text-center">
-                  <span
-                    aria-hidden
-                    className="mx-auto block h-[46px] w-[150px] bg-[#13302a]"
-                    style={{ WebkitMaskImage: "url(/images/logo.png)", maskImage: "url(/images/logo.png)", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }}
-                  />
-                  <p className="mt-3 font-[family-name:var(--font-display)] text-[22px] italic leading-none tracking-normal">A home away from home</p>
-                  <p className="mt-3 text-[10.5px] leading-snug text-[#13302a]/60">
-                    Chamundi Hills Main Road, JC Nagar
-                    <br />
-                    Mysuru 570011 · {HOTEL.phones[0].label}
-                  </p>
-                </div>
-
-                <div className="dd-ticket-rule my-5" />
-                <p className="text-center text-[11px] uppercase tracking-[0.3em]">Booking receipt</p>
-                <div className="dd-ticket-rule my-5" />
-
-                <div className="space-y-0.5">
-                  <Row label="No." value={booking.id.toUpperCase()} />
-                  <Row label="Issued" value={issued} />
-                  <Row label="Guest" value={booking.guestName} />
-                </div>
-
-                <div className="dd-ticket-rule my-5" />
-
-                <div className="space-y-0.5">
-                  <Row label="Room" value={booking.roomName} />
-                  <Row label="Check-in" value={`${format(parseISO(booking.checkIn), "dd MMM")} · ${CHECK_IN_TIME}`} />
-                  <Row label="Check-out" value={`${format(parseISO(booking.checkOut), "dd MMM")} · ${CHECK_OUT_TIME}`} />
-                  <Row label="Nights" value={String(nights)} />
-                  <Row label="Guests" value={String(booking.guests)} />
-                </div>
-
-                <div className="dd-ticket-rule my-5" />
-
-                <div className="space-y-0.5">
-                  <Row label={`${booking.roomName} × ${nights}`} value={rupees(booking.amountInr)} />
-                  <Row label="Taxes & fees" value="Included" />
-                </div>
-                <div className="mt-3 border-t-2 border-[#13302a] pt-3">
-                  <Row label="Total" value={rupees(booking.amountInr)} strong />
-                  <Row label="Payment" value={paymentLabel(booking)} />
-                </div>
-
-                <div className="dd-ticket-rule my-6" />
-
-                {/* Barcode */}
-                <div className="flex h-[46px] items-stretch justify-center gap-[1.5px]" aria-hidden>
-                  {barcode(booking.id).map((w, i) => (
-                    <span key={i} className={i % 2 === 0 ? "bg-[#13302a]" : "bg-transparent"} style={{ width: w * 1.6 }} />
-                  ))}
-                </div>
-                <p className="mt-2 text-center text-[10px] tracking-[0.4em] text-[#13302a]/60">{booking.id.toUpperCase()}</p>
-
-                <p className="mt-6 text-center font-[family-name:var(--font-display)] text-[19px] italic leading-snug">
-                  Thank you, {firstName}.
-                </p>
-                <p className="text-center text-[10.5px] text-[#13302a]/55">Show this slip or your booking no. at the desk.</p>
-
+                {slipBody}
                 {/* Stamp */}
                 <motion.div
                   aria-hidden
@@ -325,5 +332,19 @@ export function BookingReceipt({ booking }: { booking: ReceiptBooking }) {
         </motion.p>
       </div>
     </div>
+
+    {/* Print / Save as PDF: a plain, uncropped copy of the slip. The on-screen
+        one lives inside clipped, transformed animation layers, which browsers
+        cut off when printing. */}
+    <div className="dd-print-sheet" aria-hidden>
+      <article className="dd-ticket-print relative mx-auto bg-white px-8 py-8 font-mono text-[12.5px] leading-[1.75] text-[#13302a]">
+        {slipBody}
+        <div className={`dd-ticket-stamp dd-ticket-stamp--${copy.tone} absolute right-6 top-[196px] -rotate-12`}>
+          <span>{copy.stamp}</span>
+          <small>Deccan Dwell · Mysuru</small>
+        </div>
+      </article>
+    </div>
+    </>
   );
 }

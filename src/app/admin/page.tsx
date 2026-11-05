@@ -1,13 +1,18 @@
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { listAdminBookings } from "@/lib/inventory";
-import { AdminShell } from "@/components/admin/AdminShell";
+import { AdminApp } from "@/components/admin/desk/AdminApp";
 
 export const dynamic = "force-dynamic";
+
+export const metadata = {
+  title: "Front desk · Deccan Dwell",
+  robots: { index: false },
+};
 
 export default async function AdminPage() {
   const admin = await requireAdmin();
   if (!admin) redirect("/admin/login");
   const bookings = await listAdminBookings();
-  return <AdminShell email={admin.email} bookings={bookings} />;
+  return <AdminApp email={admin.email} bookings={bookings} />;
 }

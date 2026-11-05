@@ -6,6 +6,9 @@ import { getRoomTypeById, ROOM_TYPES, stayTotalInr } from "./rooms";
 
 export const HOLD_WINDOW_MINUTES = 15;
 
+/** Statuses that hold a room for the night (pending holds are added separately). */
+const OCCUPYING_STATUSES = ["confirmed", "checked_in", "blocked"];
+
 function newId(prefix: string) {
   return `${prefix}_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
 }
@@ -119,7 +122,7 @@ async function nightCounts(
       night: { in: nights },
       booking: {
         OR: [
-          { status: "confirmed" },
+          { status: { in: OCCUPYING_STATUSES } },
           { AND: [{ status: "pending" }, { holdExpiresAt: { gt: nowIso } }] },
         ],
       },
@@ -222,6 +225,11 @@ export async function createPendingBooking(input: {
   guestPhone: string;
   paymentMethod?: PaymentMethod;
   userId?: string;
+  /** Front-desk only: custom total and an internal note. */
+  amountOverrideInr?: number;
+  adminNote?: string;
+  /** Front-desk only: a room block (out of order / owner use) rather than a guest. */
+  block?: boolean;
 }): Promise<{ ok: true; booking: Booking } | { ok: false; error: string }> {
   const room = (await managedRooms()).find((item) => item.id === input.roomTypeId);
   if (!room) return { ok: false, error: "Unknown room type" };
@@ -233,7 +241,11 @@ export async function createPendingBooking(input: {
     return { ok: false, error: `This stay allows up to ${room.maxGuests} guests` };
   }
   const payAtHotel = input.paymentMethod === "at_hotel";
-  const amountInr = stayTotalInr(room, nights, input.guests);
+  const amountInr = input.block
+    ? 0
+    : input.amountOverrideInr !== undefined && input.amountOverrideInr >= 0
+      ? Math.round(input.amountOverrideInr)
+      : stayTotalInr(room, nights, input.guests);
   const depositInr = payAtHotel ? 0 : amountInr;
 
   try {
@@ -254,7 +266,7 @@ export async function createPendingBooking(input: {
           night: { in: stay },
           booking: {
             OR: [
-              { status: "confirmed" },
+              { status: { in: OCCUPYING_STATUSES } },
               { AND: [{ status: "pending" }, { holdExpiresAt: { gt: nowIso } }] },
             ],
           },
@@ -283,7 +295,8 @@ export async function createPendingBooking(input: {
           guestPhone: input.guestPhone,
           guestEmail: input.guestEmail.trim().toLowerCase(),
           userId: input.userId || null,
-          status: payAtHotel ? "confirmed" : "pending",
+          status: input.block ? "blocked" : payAtHotel ? "confirmed" : "pending",
+          adminNote: input.adminNote?.trim().slice(0, 1000) || null,
           amountInr,
           depositInr,
           paymentMethod: payAtHotel ? "at_hotel" : "online",
@@ -378,7 +391,7 @@ export async function cancelBooking(bookingId: string) {
   return { ok: true as const, booking: toBooking(updated) };
 }
 
-const ADMIN_STATUSES = ["pending", "confirmed", "checked_in", "checked_out", "cancelled", "expired"] as const;
+const ADMIN_STATUSES = ["pending", "confirmed", "checked_in", "checked_out", "no_show", "cancelled", "expired"] as const;
 
 export async function updateBookingStatus(bookingId: string, status: (typeof ADMIN_STATUSES)[number]) {
   const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
@@ -565,7 +578,7 @@ export async function reviewBookingRequest(requestId: string, status: "approved"
             bookingId: { not: booking.id },
             booking: {
               OR: [
-                { status: "confirmed" },
+                { status: { in: OCCUPYING_STATUSES } },
                 { AND: [{ status: "pending" }, { holdExpiresAt: { gt: new Date().toISOString() } }] },
               ],
             },
@@ -619,7 +632,7 @@ export async function markBookingPaid(bookingId: string) {
   const updated = await prisma.booking.update({
     where: { id: bookingId },
     data: {
-      status: "confirmed",
+      status: booking.status === "pending" ? "confirmed" : booking.status,
       paymentId: booking.paymentId?.startsWith("pay_")
         ? booking.paymentId
         : "paid_at_hotel",
@@ -661,3 +674,101 @@ export async function listGuestBookings(input: { userId?: string; email?: string
 }
 
 export { nightsBetween };
+
+
+/** Front desk: move a stay to new dates and/or another room type. */
+export async function updateBookingStay(input: {
+  bookingId: string;
+  checkIn: string;
+  checkOut: string;
+  roomTypeId?: string;
+  guests?: number;
+  repriceStay?: boolean;
+}) {
+  await expireStaleHolds();
+  try {
+    const updated = await prisma.$transaction(async (tx) => {
+      const booking = await tx.booking.findUnique({ where: { id: input.bookingId } });
+      if (!booking) throw new Error("Booking not found");
+      if (["cancelled", "expired", "checked_out", "no_show"].includes(booking.status)) {
+        throw new Error("This booking can no longer be changed");
+      }
+      const room = (await managedRooms()).find((item) => item.id === (input.roomTypeId || booking.roomTypeId));
+      if (!room) throw new Error("Unknown room type");
+      const nights = stayNights(input.checkIn, input.checkOut);
+      if (nights.length < 1) throw new Error("Check-out must be after check-in");
+      const guests = input.guests ?? booking.guests;
+      if (booking.status !== "blocked" && guests > room.maxGuests) {
+        throw new Error(`${room.name} allows up to ${room.maxGuests} guests`);
+      }
+      const occupied = await tx.bookingNight.findMany({
+        where: {
+          roomTypeId: room.id,
+          night: { in: nights },
+          bookingId: { not: booking.id },
+          booking: {
+            OR: [
+              { status: { in: OCCUPYING_STATUSES } },
+              { AND: [{ status: "pending" }, { holdExpiresAt: { gt: new Date().toISOString() } }] },
+            ],
+          },
+        },
+        select: { night: true },
+      });
+      const counts = new Map<string, number>();
+      for (const row of occupied) counts.set(row.night, (counts.get(row.night) ?? 0) + 1);
+      const full = nights.find((night) => (counts.get(night) ?? 0) >= room.totalUnits);
+      if (full) throw new Error(`${room.name} is full on ${full}`);
+
+      const amountInr = booking.status === "blocked"
+        ? 0
+        : input.repriceStay
+          ? stayTotalInr(room, nights.length, guests)
+          : booking.amountInr;
+      await tx.bookingNight.deleteMany({ where: { bookingId: booking.id } });
+      await tx.bookingNight.createMany({
+        data: nights.map((night) => ({ id: newId("nt"), bookingId: booking.id, roomTypeId: room.id, night })),
+      });
+      return tx.booking.update({
+        where: { id: booking.id },
+        data: {
+          checkIn: input.checkIn,
+          checkOut: input.checkOut,
+          roomTypeId: room.id,
+          guests,
+          amountInr,
+          depositInr: booking.paymentMethod === "online" ? amountInr : booking.depositInr,
+        },
+        include: { roomType: true },
+      });
+    });
+    return { ok: true as const, booking: { ...toBooking(updated), roomName: updated.roomType.name } };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "Could not change the stay" };
+  }
+}
+
+/** Front desk: correct the guest's details or the agreed total. */
+export async function updateBookingGuest(input: {
+  bookingId: string;
+  guestName?: string;
+  guestEmail?: string;
+  guestPhone?: string;
+  amountInr?: number;
+}) {
+  try {
+    const updated = await prisma.booking.update({
+      where: { id: input.bookingId },
+      data: {
+        guestName: input.guestName?.trim() || undefined,
+        guestEmail: input.guestEmail !== undefined ? input.guestEmail.trim().toLowerCase() : undefined,
+        guestPhone: input.guestPhone !== undefined ? input.guestPhone.trim() : undefined,
+        amountInr: input.amountInr !== undefined ? Math.max(0, Math.round(input.amountInr)) : undefined,
+      },
+      include: { roomType: true },
+    });
+    return { ok: true as const, booking: { ...toBooking(updated), roomName: updated.roomType.name } };
+  } catch {
+    return { ok: false as const, error: "Booking not found" };
+  }
+}

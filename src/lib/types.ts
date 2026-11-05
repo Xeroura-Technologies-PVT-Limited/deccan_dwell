@@ -3,8 +3,10 @@ export type BookingStatus =
   | "confirmed"
   | "checked_in"
   | "checked_out"
+  | "no_show"
   | "cancelled"
-  | "expired";
+  | "expired"
+  | "blocked";
 
 export type RoomKind = "room" | "suite";
 

@@ -1734,20 +1734,39 @@ html.dd-has-cursor :is(input, textarea, select, [contenteditable="true"]) {
   .dd-ticket-led { animation: none; }
 }
 
+.dd-print-sheet {
+  display: none;
+}
 @media print {
-  body { background: #fff !important; }
-  body * { visibility: hidden !important; }
-  .dd-ticket-paper, .dd-ticket-paper * { visibility: visible !important; }
-  .dd-ticket-paper {
-    position: fixed !important;
-    left: 50%;
-    top: 0;
-    width: 340px;
-    transform: translateX(-50%);
-    -webkit-mask: none;
-    mask: none;
+  @page {
+    size: A4;
+    margin: 14mm;
   }
-  .dd-ticket-shadow { filter: none; transform: none !important; }
+  html,
+  body {
+    background: #fff !important;
+  }
+  .dd-print-hide,
+  .dd-grain::before {
+    display: none !important;
+  }
+  .dd-print-sheet {
+    display: block !important;
+  }
+  .dd-ticket-print {
+    width: 92mm;
+    border: 1px dashed rgba(19, 48, 42, 0.35);
+    break-inside: avoid;
+  }
+  .dd-ticket-print .dd-ticket-stamp {
+    mix-blend-mode: normal;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
 
 /* ------------------------------------------------------------------
@@ -1801,3 +1820,18 @@ html.dd-has-cursor :is(input, textarea, select, [contenteditable="true"]) {
 .dd-sda [data-sda="statement"] { animation-name: dd-sda-statement; }
 .dd-sda [data-sda="dim"] { animation-name: dd-sda-dim; }
 .dd-sda [data-sda="rest"] { animation-name: dd-sda-rest; }
+
+/* ------------------------------------------------------------------
+   Front desk (admin) — light, quiet, data-first.
+   ------------------------------------------------------------------ */
+.dda {
+  --a-bg: #f5f2eb;
+  --a-ink: #16302a;
+  --a-muted: #6b7873;
+  --a-line: #e5dfd2;
+  color-scheme: light;
+}
+.dda-hatch {
+  background-color: #ece8df;
+  background-image: repeating-linear-gradient(135deg, rgba(22, 48, 42, 0.12) 0 2px, transparent 2px 7px);
+}
