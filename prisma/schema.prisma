@@ -53,8 +53,11 @@ model Booking {
   holdExpiresAt   String?
   createdAt       String
   adminNote       String?
+  cancelReason    String?
+  cancelledAt     String?
   nights          BookingNight[]
   requests        BookingRequest[]
+  payments        Payment[]
 
   @@index([roomTypeId, status])
   @@index([guestEmail])
@@ -88,4 +91,19 @@ model BookingRequest {
 
   @@index([bookingId, status])
   @@index([status, createdAt])
+}
+
+/// Money taken or returned at the front desk. Refunds are negative amounts.
+model Payment {
+  id        String  @id
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  amountInr Int
+  method    String
+  note      String?
+  createdAt String
+  createdBy String?
+
+  @@index([bookingId])
+  @@index([createdAt])
 }

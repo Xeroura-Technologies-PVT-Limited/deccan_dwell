@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { useDesk } from "./store";
 import { Btn, Card, Empty, Kpi, StatusPill, PaidPill, cx } from "./ui";
 import { Columns } from "./charts";
-import { occupancyMap, periodStats, totalUnits } from "./metrics";
+import { collections, occupancyMap, periodStats, totalUnits } from "./metrics";
 import { addCalendarDays, balanceDue, fmtDay, fmtStamp, isPaid, nightsOf, rupees, todayISO, type AdminBooking } from "./lib";
 
 type Go = (v: "today" | "calendar" | "reservations" | "guests" | "rooms" | "requests" | "reports") => void;
@@ -29,7 +29,8 @@ export function TodayView({ go }: { go: Go }) {
     const mtd = periodStats(desk.bookings, desk.rooms, `${month}-01`, addCalendarDays(today, 1));
     const recent = desk.bookings.filter((b) => b.status !== "blocked").slice(0, 6);
     const dueToday = [...arrivals, ...inHouse].reduce((n, b) => n + balanceDue(b), 0);
-    return { arrivals, departures, inHouse, late, overstay, unpaidInHouse, holds, occ, tonight, mtd, recent, dueToday };
+    const takenToday = collections(desk.bookings, today, addCalendarDays(today, 1));
+    return { takenToday, arrivals, departures, inHouse, late, overstay, unpaidInHouse, holds, occ, tonight, mtd, recent, dueToday };
   }, [desk.bookings, desk.rooms, today]);
 
   const sellable = Math.max(0, units - d.tonight.blocked);
@@ -72,7 +73,7 @@ export function TodayView({ go }: { go: Go }) {
         <Kpi label="Departures" value={d.departures.length} hint={`${d.departures.filter((b) => b.status === "checked_out").length} checked out`} />
         <Kpi label="In house" value={d.inHouse.length} hint="guests staying now" />
         <Kpi label="Revenue this month" value={rupees(d.mtd.revenue)} hint={`ADR ${rupees(d.mtd.adr)} · RevPAR ${rupees(d.mtd.revpar)}`} />
-        <Kpi label="To collect today" value={rupees(d.dueToday)} hint="arrivals + in house" />
+        <Kpi label="To collect" value={rupees(d.dueToday)} hint={`${rupees(d.takenToday.net)} received today`} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">

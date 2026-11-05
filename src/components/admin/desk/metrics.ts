@@ -92,3 +92,29 @@ function sourceFromNote(b: AdminBooking) {
   const m = b.adminNote?.match(/^Source:\s*(.+)$/m);
   return m ? m[1].trim() : "Website";
 }
+
+const istDay = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date(iso));
+
+/** Money actually received (or refunded) in [from, to), by method, from the ledger and online payments. */
+export function collections(bookings: AdminBooking[], from: string, to: string) {
+  const byMethod = new Map<string, number>();
+  let received = 0;
+  let refunded = 0;
+  const add = (method: string, amount: number) => {
+    if (amount >= 0) {
+      received += amount;
+      byMethod.set(method, (byMethod.get(method) ?? 0) + amount);
+    } else refunded += -amount;
+  };
+  for (const b of bookings) {
+    if (b.paymentId?.startsWith("pay_")) {
+      const d = istDay(b.createdAt);
+      if (d >= from && d < to) add("online", b.depositInr || b.amountInr);
+    }
+    for (const p of b.payments ?? []) {
+      const d = istDay(p.createdAt);
+      if (d >= from && d < to) add(p.method, p.amountInr);
+    }
+  }
+  return { byMethod, received, refunded, net: received - refunded };
+}

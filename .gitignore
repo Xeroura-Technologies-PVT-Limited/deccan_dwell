@@ -57,3 +57,6 @@ setup-db.log
 push.command
 push.log
 vercel-production.env
+.desk-task
+push.sh
+Claude outputs/

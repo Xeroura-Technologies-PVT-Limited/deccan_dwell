@@ -177,6 +177,12 @@ function heroKeyframes(boxW: number, boxH: number) {
       const o = lerpStops(p, [0, vh(22), vh(44)], [1, 1, 0]);
       return `transform:translateX(${f3(x)}px) scale(${f3(sc)});opacity:${f3(o)}`;
     }),
+    keyframes("dd-sda-hills", N, (p) => {
+      const x = lerpStops(p, [0, vh(66)], [0, 340]);
+      const sc = lerpStops(p, [0, vh(66)], [1, 1.12]);
+      const o = lerpStops(p, [0, vh(30), vh(60)], [1, 1, 0]);
+      return `transform:translateX(${f3(x)}px) scale(${f3(sc)});opacity:${f3(o)}`;
+    }),
     keyframes("dd-sda-side-l", N, (p) => {
       const x = lerpStops(p, [0, TP], [0, -1100]);
       const sc = lerpStops(p, [0, TP], [1, 1.45]);
@@ -263,6 +269,7 @@ export function HeroPortal() {
 
   // Elements whose fade is applied by hand — see `fades` below.
   const palmRef = useRef<HTMLDivElement>(null);
+  const hillsRef = useRef<HTMLDivElement>(null);
   const sideLeftRef = useRef<HTMLDivElement>(null);
   const sideRightRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLDivElement>(null);
@@ -383,6 +390,11 @@ export function HeroPortal() {
   const palmsOpacity = useTransform(progress, [0, vh(22), vh(44)], [1, 1, 0]);
   const palmsX = useTransform(progress, [0, vh(66)], [0, -980]);
   const palmsScale = useTransform(progress, [0, vh(66)], [1, 1.4]);
+  // The hills are far off: they drift out the other way, at about a third of
+  // the palm's speed, grow less and linger a little longer.
+  const hillsX = useTransform(progress, [0, vh(66)], [0, 340]);
+  const hillsScale = useTransform(progress, [0, vh(66)], [1, 1.12]);
+  const hillsOpacity = useTransform(progress, [0, vh(30), vh(60)], [1, 1, 0]);
 
   /** Title rushes toward the camera and passes behind us. */
   const titleScale = useTransform(progress, [0, TITLE_PASS, 1], [0.34, 0.48, 0.48]);
@@ -420,6 +432,7 @@ export function HeroPortal() {
     () =>
       [
         [palmRef, palmsOpacity],
+        [hillsRef, hillsOpacity],
         [sideLeftRef, sideOpacity],
         [sideRightRef, sideOpacity],
         [titleRef, titleOpacity],
@@ -431,6 +444,7 @@ export function HeroPortal() {
       ] as const,
     [
       palmsOpacity,
+      hillsOpacity,
       sideOpacity,
       titleOpacity,
       exploreOpacity,
@@ -453,27 +467,39 @@ export function HeroPortal() {
     let lastScale = "";
     let lastFrameVisible = "";
     const frame = atmosphereRef.current;
-    if (frame) {
-      if (lite && box.w > 0 && box.h > 0) {
-        const { url, originY } = archMask(box.w, box.h);
-        frame.style.setProperty("-webkit-mask-image", url);
-        frame.style.setProperty("mask-image", url);
+    const stencilUrl = lite && box.w > 0 && box.h > 0 ? archMask(box.w, box.h) : null;
+    let stencilOn: boolean | null = null;
+    /**
+     * Phones/tablets: the surround becomes a stencil (arch cut out, above the
+     * photo) only once the entrance has finished. During the rise it stays
+     * underneath, so the photo itself grows up out of the sill — no dark
+     * arch-shaped hole appearing ahead of the picture.
+     */
+    const setStencil = (on: boolean) => {
+      if (!frame || stencilOn === on) return;
+      stencilOn = on;
+      if (on && stencilUrl) {
+        frame.style.setProperty("-webkit-mask-image", stencilUrl.url);
+        frame.style.setProperty("mask-image", stencilUrl.url);
         frame.style.setProperty("-webkit-mask-size", "100% 100%");
         frame.style.setProperty("mask-size", "100% 100%");
-        frame.style.transformOrigin = `50% ${originY}px`;
+        frame.style.transformOrigin = `50% ${stencilUrl.originY}px`;
         frame.style.zIndex = "3";
         frame.style.willChange = "transform";
       } else {
         for (const prop of ["-webkit-mask-image", "mask-image", "-webkit-mask-size", "mask-size"]) {
           frame.style.removeProperty(prop);
         }
-        frame.style.transform = "";
         frame.style.zIndex = "";
-        frame.style.willChange = "";
-        frame.style.visibility = "";
-        frame.style.opacity = "";
+        if (!lite) {
+          frame.style.transform = "";
+          frame.style.willChange = "";
+          frame.style.visibility = "";
+          frame.style.opacity = "";
+        }
       }
-    }
+    };
+    if (!stencilUrl) setStencil(false);
 
     const reconcile = () => {
       let changed = false;
@@ -482,6 +508,7 @@ export function HeroPortal() {
         const el = overlayRef.current;
         if (el && box.w > 0 && box.h > 0) {
           const r = rise.get();
+          if (stencilUrl) setStencil(r >= 1);
           const clip = r >= 1 ? "none" : archInset(0, box.w, box.h, r);
           if (clip !== lastClip) {
             lastClip = clip;
@@ -497,6 +524,7 @@ export function HeroPortal() {
       if (el && box.w > 0 && box.h > 0) {
         const open = openness.get();
         const r = rise.get();
+        if (stencilUrl) setStencil(r >= 1);
         // Lite mode clips the photo only during the entrance; after that the
         // scaled stencil above it does the work.
         const clip = lite && r >= 1 ? "none" : archInset(open, box.w, box.h, r);
@@ -640,6 +668,18 @@ export function HeroPortal() {
             gradients and blended palm rasterise once. */}
         <div ref={atmosphereRef} data-sda="frame" className="dd-hero-atmosphere pointer-events-none absolute inset-0 z-[1]" aria-hidden>
           <div className="dd-hero-sky" />
+          {/* Chamundi Hills behind the "foothills" caption, with a slow mist. */}
+          <motion.div
+            ref={hillsRef}
+            data-sda="hills"
+            className="pointer-events-none absolute inset-0 origin-bottom-right"
+            style={{ x: hillsX, scale: hillsScale }}
+            aria-hidden
+          >
+            <div className="dd-hero-hills dd-enter dd-enter-fade dd-delay-5">
+              <span className="dd-hero-mist" />
+            </div>
+          </motion.div>
           <motion.div
             ref={palmRef}
             data-sda="palms"

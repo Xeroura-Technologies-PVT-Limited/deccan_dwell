@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import { useDesk } from "./store";
 import { Btn, Card, Kpi, Segmented, cx, inputCls } from "./ui";
 import { BarList, Columns } from "./charts";
-import { periodStats, totalUnits } from "./metrics";
-import { addCalendarDays, downloadCsv, fmtDate, fmtDay, rupees, todayISO } from "./lib";
+import { collections, periodStats, totalUnits } from "./metrics";
+import { addCalendarDays, downloadCsv, fmtDate, fmtDay, methodLabel, rupees, todayISO } from "./lib";
 
 type Preset = "this_month" | "last_month" | "last_30" | "next_30" | "year" | "custom";
 
@@ -40,6 +40,7 @@ export function ReportsView() {
 
   const s = useMemo(() => periodStats(desk.bookings, desk.rooms, from, to), [desk.bookings, desk.rooms, from, to]);
   const units = totalUnits(desk.rooms);
+  const cash = useMemo(() => collections(desk.bookings, from, to), [desk.bookings, from, to]);
   const pct = (n: number) => `${Math.round(n * 100)}%`;
 
   const daily = useMemo(() => {
@@ -121,6 +122,18 @@ export function ReportsView() {
           {s.bySource.size === 0 && <p className="text-[13px] text-[var(--a-muted)]">No stays in this period.</p>}
         </Card>
       </div>
+
+      <Card title="Money collected" action={<span className="text-[12px] text-[var(--a-muted)]">by the day it was received</span>}>
+        <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
+          <div className="grid grid-cols-3 gap-3">
+            <Kpi label="Received" value={rupees(cash.received)} />
+            <Kpi label="Refunded" value={rupees(cash.refunded)} />
+            <Kpi label="Net" value={rupees(cash.net)} />
+          </div>
+          <BarList rows={[...cash.byMethod.entries()].sort((a, b) => b[1] - a[1]).map(([m, v]) => ({ label: methodLabel(m), value: v }))} format={rupees} />
+        </div>
+        {cash.byMethod.size === 0 && <p className="mt-3 text-[13px] text-[var(--a-muted)]">No payments recorded in this period.</p>}
+      </Card>
 
       <Card title="Room type performance" pad={false}>
         <div className="overflow-x-auto">

@@ -78,7 +78,7 @@ export function DeskProvider({ initialBookings, children }: { initialBookings: A
         const i = list.findIndex((x) => x.id === b.id);
         if (i === -1) return [withName, ...list];
         const next = list.slice();
-        next[i] = { ...list[i], ...withName, roomName: b.roomName ?? (b.roomTypeId === list[i].roomTypeId ? list[i].roomName : roomName(b.roomTypeId)) };
+        next[i] = { ...list[i], ...withName, payments: b.payments ?? list[i].payments, roomName: b.roomName ?? (b.roomTypeId === list[i].roomTypeId ? list[i].roomName : roomName(b.roomTypeId)) };
         return next;
       });
     },

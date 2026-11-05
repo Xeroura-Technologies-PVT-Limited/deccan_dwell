@@ -4,6 +4,7 @@ import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import { useState } from "react";
 import { Reveal } from "./Reveal";
+import { PlacesCarousel } from "./PlacesCarousel";
 
 const PLACES = [
   {
@@ -167,32 +168,9 @@ export function MysuruSection() {
         </div>
       </div>
 
-      {/* Phones & tablets: swipeable cards */}
-      <div className="dd-scroller mt-12 flex gap-4 overflow-x-auto px-[var(--dd-gutter)] pb-2 lg:hidden">
-        {PLACES.map((p) => (
-          <figure key={p.name} className="w-[72vw] max-w-[320px] shrink-0">
-            <div className="dd-arch relative aspect-[3/4] w-full bg-[var(--dd-night-2)]">
-              <Image
-                src={p.image}
-                alt={p.name}
-                fill
-                sizes="72vw"
-                className="object-cover"
-                style={{ objectPosition: p.position }}
-              />
-            </div>
-            <figcaption className="mt-4">
-              <span className="flex items-baseline justify-between gap-4">
-                <span className="font-[family-name:var(--font-display)] text-2xl">{p.name}</span>
-                <span className="font-[family-name:var(--font-nav)] text-[10px] uppercase tracking-[0.22em] text-[var(--dd-gold)]">
-                  {p.distance}
-                </span>
-              </span>
-              <span className="dd-body mt-2 block !text-[14px]">{p.note}</span>
-            </figcaption>
-          </figure>
-        ))}
-        <span className="w-px shrink-0" aria-hidden />
+      {/* Phones & tablets: endless swipeable coverflow */}
+      <div className="mt-12 overflow-hidden lg:hidden">
+        <PlacesCarousel places={PLACES} />
       </div>
     </section>
   );

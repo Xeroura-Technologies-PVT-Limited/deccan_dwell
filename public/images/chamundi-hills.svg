@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" preserveAspectRatio="none">
+  <!-- Chamundi Hills with the Chamundeshwari gopuram on the summit. Original artwork for Deccan Dwell. -->
+  <defs>
+    <linearGradient id="far" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#03231e" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#021a16" stop-opacity="0.8"/>
+    </linearGradient>
+    <linearGradient id="near" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#021c18" stop-opacity="0.75"/>
+      <stop offset="1" stop-color="#01130f" stop-opacity="0.95"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#far)" d="M0 268 C90 240 170 214 260 200 C340 188 400 150 452 128 C496 110 530 92 560 84 C568 82 574 80 576 78 L604 78 C612 82 640 92 676 116 C720 144 760 166 800 178 V400 H0Z"/>
+  <g fill="#021d18" fill-opacity="0.75">
+    <rect x="576" y="70" width="28" height="8"/>
+    <rect x="579" y="62" width="22" height="8"/>
+    <rect x="582" y="55" width="16" height="7"/>
+    <rect x="585" y="49" width="10" height="6"/>
+    <path d="M585 49 Q590 41 595 49Z"/>
+    <rect x="589.4" y="36" width="1.2" height="8"/>
+  </g>
+  <path fill="url(#near)" d="M0 330 C120 300 230 286 360 276 C470 268 560 246 650 244 C720 242 770 250 800 256 V400 H0Z"/>
+</svg>

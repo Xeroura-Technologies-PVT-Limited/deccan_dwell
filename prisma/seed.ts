@@ -18,15 +18,8 @@ async function main() {
         basePriceInr: room.basePriceInr,
         image: room.image,
       },
-      update: {
-        name: room.name,
-        slug: room.slug,
-        description: room.description,
-        amenities: JSON.stringify(room.amenities),
-        totalUnits: room.totalUnits,
-        basePriceInr: room.basePriceInr,
-        image: room.image,
-      },
+      // Never overwrite names, rates or room counts edited at the front desk.
+      update: {},
     });
   }
 

@@ -46,6 +46,18 @@ export type Booking = {
   createdAt: string;
   adminNote?: string;
   userId?: string;
+  cancelReason?: string;
+  cancelledAt?: string;
+  payments?: PaymentEntry[];
+};
+
+export type PaymentEntry = {
+  id: string;
+  amountInr: number;
+  method: string;
+  note?: string;
+  createdAt: string;
+  createdBy?: string;
 };
 
 export type CalendarDay = {

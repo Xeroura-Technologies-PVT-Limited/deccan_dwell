@@ -4,7 +4,10 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import {
   ADMIN_STATUSES,
+  addPayment,
   cancelBooking,
+  cancelBookingAdmin,
+  reinstateBooking,
   createPendingBooking,
   listAdminBookings,
   markBookingPaid,
@@ -37,6 +40,8 @@ const createSchema = z.discriminatedUnion("kind", [
     guestEmail: z.union([z.string().trim().email(), z.literal("")]).default(""),
     source: z.enum(["phone", "walk_in", "email", "ota", "other"]).default("phone"),
     paid: z.boolean().default(false),
+    advanceInr: z.number().int().min(0).optional(),
+    advanceMethod: z.enum(["cash", "upi", "card", "bank"]).default("cash"),
     amountOverrideInr: z.number().int().min(0).optional(),
     note: z.string().max(1000).optional(),
   }),
@@ -108,7 +113,10 @@ async function handlePOST(request: Request) {
   });
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 409 });
   if (input.paid) {
-    const paid = await markBookingPaid(result.booking.id);
+    const paid = await markBookingPaid(result.booking.id, input.advanceMethod, admin.email);
+    if (paid.ok) return NextResponse.json({ booking: paid.booking });
+  } else if (input.advanceInr && input.advanceInr > 0) {
+    const paid = await addPayment({ bookingId: result.booking.id, amountInr: input.advanceInr, method: input.advanceMethod, note: "Advance", createdBy: admin.email });
     if (paid.ok) return NextResponse.json({ booking: paid.booking });
   }
   return NextResponse.json({ booking: result.booking });
@@ -162,9 +170,33 @@ async function handlePATCH(request: Request) {
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: 409 });
       return NextResponse.json({ booking: result.booking });
     }
+    case "add_payment": {
+      const parsed = z
+        .object({ amountInr: z.number().int().refine((n) => n !== 0), method: z.enum(["cash", "upi", "card", "bank", "other"]), note: z.string().max(300).optional() })
+        .safeParse(body);
+      if (!parsed.success) return NextResponse.json({ error: "Check the amount" }, { status: 400 });
+      const result = await addPayment({ bookingId: id, ...parsed.data, createdBy: admin.email });
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 409 });
+      return NextResponse.json({ booking: result.booking });
+    }
+    case "cancel_admin": {
+      const parsed = z
+        .object({ reason: z.string().max(300).optional(), refundInr: z.number().int().min(0).optional(), refundMethod: z.enum(["cash", "upi", "card", "bank", "other"]).optional() })
+        .safeParse(body);
+      if (!parsed.success) return NextResponse.json({ error: "Check the cancellation details" }, { status: 400 });
+      const result = await cancelBookingAdmin({ bookingId: id, ...parsed.data, createdBy: admin.email });
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 409 });
+      return NextResponse.json({ booking: result.booking });
+    }
+    case "reinstate": {
+      const result = await reinstateBooking(id);
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 409 });
+      return NextResponse.json({ booking: result.booking });
+    }
     case "cancel":
     case "mark_paid": {
-      const result = action === "cancel" ? await cancelBooking(id) : await markBookingPaid(id);
+      const method = ["cash", "upi", "card", "bank", "other"].includes(body?.method) ? body.method : "cash";
+      const result = action === "cancel" ? await cancelBooking(id) : await markBookingPaid(id, method, admin.email);
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: 409 });
       return NextResponse.json({ booking: result.booking });
     }

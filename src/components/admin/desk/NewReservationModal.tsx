@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useDesk } from "./store";
 import { Btn, Field, Modal, Segmented, cx, inputCls, useToast } from "./ui";
 import { ROOM_TYPES, stayTotalInr } from "@/lib/inventory-client";
-import { addCalendarDays, isLive, rupees, stayNights, todayISO } from "./lib";
+import { METHODS, addCalendarDays, isLive, rupees, stayNights, todayISO } from "./lib";
 
 type Source = "phone" | "walk_in" | "email" | "ota" | "other";
 
@@ -31,7 +31,9 @@ function Form() {
     guestPhone: "",
     guestEmail: "",
     source: "phone" as Source,
-    paid: false,
+    pay: "later" as "later" | "advance" | "full",
+    advance: "",
+    method: "cash",
     custom: "",
     note: "",
   });
@@ -55,17 +57,18 @@ function Form() {
   })();
 
   const tooMany = room ? guests > room.maxGuests : false;
-  const valid = !!room && nights.length > 0 && f.guestName.trim().length >= 2 && f.guestPhone.trim().length >= 6 && (left ?? 0) > 0 && !tooMany;
+  const advanceOk = f.pay !== "advance" || ((Number(f.advance) || 0) > 0 && (Number(f.advance) || 0) <= total);
+  const valid = advanceOk && !!room && nights.length > 0 && f.guestName.trim().length >= 2 && f.guestPhone.trim().length >= 6 && (left ?? 0) > 0 && !tooMany;
 
   return (
     <div className="grid gap-0 md:grid-cols-[1fr_240px]">
       <div className="space-y-4 p-6">
-        <div className="grid gap-3 sm:grid-cols-[1.3fr_1fr_1fr_0.6fr]">
-          <Field label="Room type">
-            <select className={inputCls} value={f.roomTypeId} onChange={(e) => set({ roomTypeId: e.target.value })}>
-              {(desk.rooms.length ? desk.rooms : ROOM_TYPES).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
-          </Field>
+        <Field label="Room type">
+          <select className={inputCls} value={f.roomTypeId} onChange={(e) => set({ roomTypeId: e.target.value })}>
+            {(desk.rooms.length ? desk.rooms : ROOM_TYPES).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+        </Field>
+        <div className="grid grid-cols-[1fr_1fr_88px] gap-3">
           <Field label="Check-in"><input type="date" className={inputCls} value={f.checkIn} onChange={(e) => set({ checkIn: e.target.value, checkOut: e.target.value >= f.checkOut ? addCalendarDays(e.target.value, 1) : f.checkOut })} /></Field>
           <Field label="Check-out"><input type="date" className={inputCls} value={f.checkOut} min={addCalendarDays(f.checkIn, 1)} onChange={(e) => set({ checkOut: e.target.value })} /></Field>
           <Field label="Guests"><input type="number" min={1} max={8} className={inputCls} value={f.guests} onChange={(e) => set({ guests: e.target.value })} /></Field>
@@ -108,13 +111,27 @@ function Form() {
         <Field label="Custom total (₹)" hint="Leave blank to use the rate.">
           <input type="number" min={0} className={inputCls} value={f.custom} onChange={(e) => set({ custom: e.target.value })} placeholder={String(quote)} />
         </Field>
-        <Field label="Payment">
-          <Segmented<"later" | "paid">
-            value={f.paid ? "paid" : "later"}
-            onChange={(v) => set({ paid: v === "paid" })}
-            options={[{ value: "later", label: "At check-in" }, { value: "paid", label: "Paid now" }]}
+        <Field label="Payment now">
+          <Segmented<"later" | "advance" | "full">
+            value={f.pay}
+            onChange={(pay) => set({ pay })}
+            options={[{ value: "later", label: "None" }, { value: "advance", label: "Advance" }, { value: "full", label: "Full" }]}
           />
         </Field>
+        {f.pay !== "later" && (
+          <div className="grid grid-cols-2 gap-2">
+            {f.pay === "advance" ? (
+              <Field label="Advance (₹)"><input type="number" min={1} className={inputCls} value={f.advance} onChange={(e) => set({ advance: e.target.value })} /></Field>
+            ) : (
+              <Field label="Amount"><input disabled className={inputCls} value={rupees(total)} /></Field>
+            )}
+            <Field label="Method">
+              <select className={inputCls} value={f.method} onChange={(e) => set({ method: e.target.value })}>
+                {METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </select>
+            </Field>
+          </div>
+        )}
         <Btn
           variant="primary"
           className="mt-auto w-full"
@@ -131,7 +148,9 @@ function Form() {
               guestPhone: f.guestPhone.trim(),
               guestEmail: f.guestEmail.trim(),
               source: f.source,
-              paid: f.paid,
+              paid: f.pay === "full",
+              advanceInr: f.pay === "advance" ? Number(f.advance) || 0 : undefined,
+              advanceMethod: f.method,
               amountOverrideInr: f.custom !== "" ? Number(f.custom) : undefined,
               note: f.note.trim() || undefined,
             });

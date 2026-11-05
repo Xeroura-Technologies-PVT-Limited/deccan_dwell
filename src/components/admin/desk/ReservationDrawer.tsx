@@ -2,9 +2,9 @@
 
 import { useState, type ReactNode } from "react";
 import { useDesk } from "./store";
-import { Btn, ConfirmBtn, Drawer, Field, PaidPill, StatusPill, inputCls, useToast } from "./ui";
+import { Btn, ConfirmBtn, Drawer, Field, PaidPill, Segmented, StatusPill, inputCls, useToast } from "./ui";
 import { CHECK_IN_TIME, CHECK_OUT_TIME } from "@/lib/hotel";
-import { balanceDue, fmtDate, fmtStamp, isPaid, nightsOf, noteText, rupees, sourceOf, todayISO, whatsappHref, type AdminBooking } from "./lib";
+import { METHODS, balanceDue, confirmationText, creditHeld, fmtDate, fmtStamp, isPaid, methodLabel, nightsOf, noteText, paidAmount, rupees, sourceOf, todayISO, whatsappHref, type AdminBooking } from "./lib";
 
 export function ReservationDrawer() {
   const desk = useDesk();
@@ -47,6 +47,8 @@ function Detail({ b }: { b: AdminBooking }) {
   const [busy, setBusy] = useState(false);
   const [editStay, setEditStay] = useState(false);
   const [editGuest, setEditGuest] = useState(false);
+  const [pay, setPay] = useState<null | { checkout: boolean }>(null);
+  const [cancelling, setCancelling] = useState(false);
   const [note, setNote] = useState(noteText(b));
 
   const run = async (body: Record<string, unknown>, msg: string) => {
@@ -65,7 +67,7 @@ function Detail({ b }: { b: AdminBooking }) {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <StatusPill status={b.status} />
-              {!block && <PaidPill paid={paid} due={due} />}
+              {!block && ["pending", "confirmed", "checked_in", "checked_out"].includes(b.status) && <PaidPill paid={paid} due={due} />}
             </div>
             <h2 className="mt-3 truncate font-[family-name:var(--font-display)] text-[32px] leading-tight">{b.guestName}</h2>
             <p className="mt-1 text-[12.5px] text-[var(--a-muted)]">
@@ -88,33 +90,44 @@ function Detail({ b }: { b: AdminBooking }) {
           )}
           {b.status === "checked_in" && (
             due > 0 ? (
-              <ConfirmBtn
-                variant="primary"
-                disabled={busy}
-                label={`Collect ${rupees(due)} & check out`}
-                confirmLabel={`Received ${rupees(due)}? Check out`}
-                onConfirm={async () => {
-                  if (await run({ action: "mark_paid" }, "Payment recorded")) await run({ action: "set_status", status: "checked_out" }, `${b.guestName} checked out`);
-                }}
-              />
+              <Btn variant="primary" disabled={busy} onClick={() => setPay({ checkout: true })}>Collect {rupees(due)} &amp; check out</Btn>
             ) : (
               <Btn variant="primary" disabled={busy} onClick={() => run({ action: "set_status", status: "checked_out" }, `${b.guestName} checked out`)}>Check out</Btn>
             )
           )}
-          {!block && !paid && ["pending", "confirmed", "checked_in", "checked_out"].includes(b.status) && (
-            <ConfirmBtn variant="gold" disabled={busy} label={`Record payment · ${rupees(b.amountInr)}`} confirmLabel="Payment received?" onConfirm={() => run({ action: "mark_paid" }, "Payment recorded")} />
+          {!block && due > 0 && ["pending", "confirmed", "checked_in", "checked_out"].includes(b.status) && (
+            <Btn variant="gold" disabled={busy} onClick={() => setPay({ checkout: false })}>Take payment</Btn>
           )}
           {b.status === "confirmed" && b.checkIn <= today && (
             <ConfirmBtn variant="secondary" disabled={busy} label="No-show" confirmLabel="Mark no-show?" onConfirm={() => run({ action: "set_status", status: "no_show" }, "Marked as no-show")} />
           )}
-          {["pending", "confirmed"].includes(b.status) && (
-            <ConfirmBtn variant="danger" disabled={busy} label="Cancel booking" confirmLabel="Cancel for sure?" onConfirm={() => run({ action: "cancel" }, "Booking cancelled")} />
+          {["pending", "confirmed", "checked_in"].includes(b.status) && (
+            <Btn variant="danger" disabled={busy} onClick={() => setCancelling(true)}>Cancel booking</Btn>
+          )}
+          {["cancelled", "no_show", "expired"].includes(b.status) && !block && (
+            <ConfirmBtn variant="primary" disabled={busy} label="Reinstate booking" confirmLabel="Reinstate if free?" onConfirm={() => run({ action: "reinstate" }, "Booking reinstated")} />
           )}
           {block && <ConfirmBtn variant="danger" disabled={busy} label="Release rooms" confirmLabel="Release?" onConfirm={() => run({ action: "cancel" }, "Room released")} />}
         </div>
+        {!block && (
+          <div className="mt-3 flex flex-wrap gap-2 text-[12.5px]">
+            {whatsappHref(b.guestPhone) && ["confirmed", "checked_in", "pending"].includes(b.status) && (
+              <a href={whatsappHref(b.guestPhone, confirmationText(b))} target="_blank" rel="noreferrer" className="rounded-lg border border-[var(--a-line)] px-3 py-1.5 hover:bg-[#f7f4ed]">Send confirmation on WhatsApp</a>
+            )}
+            <a href={`/admin/invoice/${b.id}`} target="_blank" rel="noreferrer" className="rounded-lg border border-[var(--a-line)] px-3 py-1.5 hover:bg-[#f7f4ed]">Print invoice ↗</a>
+          </div>
+        )}
       </header>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+        {pay && <PaymentForm b={b} checkout={pay.checkout} onDone={() => setPay(null)} />}
+        {cancelling && <CancelForm b={b} onDone={() => setCancelling(false)} />}
+        {b.status === "cancelled" && (b.cancelReason || b.cancelledAt) && (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-3 text-[13px] text-rose-900">
+            Cancelled{b.cancelledAt ? ` ${fmtStamp(b.cancelledAt)}` : ""}{b.cancelReason ? ` — ${b.cancelReason}` : ""}
+            {creditHeld(b) > 0 && <span className="block">{rupees(creditHeld(b))} kept after refunds.</span>}
+          </div>
+        )}
         <Section title="Stay" action={["pending", "confirmed", "checked_in", "blocked"].includes(b.status) && <Btn size="sm" variant="ghost" onClick={() => setEditStay((v) => !v)}>{editStay ? "Close" : "Change"}</Btn>}>
           {editStay ? (
             <StayEditor b={b} onDone={() => setEditStay(false)} />
@@ -161,12 +174,30 @@ function Detail({ b }: { b: AdminBooking }) {
         )}
 
         {!block && (
-          <Section title="Payment">
-            <Row k="Total" v={<span className="font-[family-name:var(--font-display)] text-[22px]">{rupees(b.amountInr)}</span>} />
-            <Row k="Method" v={b.paymentMethod === "online" ? "Paid online" : "Pay at hotel"} />
-            <Row k="Status" v={<PaidPill paid={paid} due={due} />} />
-            {b.paymentId?.startsWith("pay_") && <Row k="Razorpay ID" v={<span className="font-mono text-[12px]">{b.paymentId}</span>} />}
-            {b.status === "pending" && b.holdExpiresAt && <Row k="Hold expires" v={fmtStamp(b.holdExpiresAt)} />}
+          <Section title="Payments" action={<Btn size="sm" variant="ghost" onClick={() => setPay({ checkout: false })}>+ Add</Btn>}>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-xl bg-[#f7f4ed] p-3"><p className="text-[11.5px] text-[var(--a-muted)]">Total</p><p className="text-[15px] font-semibold">{rupees(b.amountInr)}</p></div>
+              <div className="rounded-xl bg-[#f7f4ed] p-3"><p className="text-[11.5px] text-[var(--a-muted)]">Received</p><p className="text-[15px] font-semibold text-emerald-800">{rupees(paidAmount(b))}</p></div>
+              <div className="rounded-xl bg-[#f7f4ed] p-3"><p className="text-[11.5px] text-[var(--a-muted)]">Balance</p><p className={`text-[15px] font-semibold ${due > 0 ? "text-amber-800" : ""}`}>{rupees(due)}</p></div>
+            </div>
+            <ul className="mt-4 divide-y divide-[var(--a-line)] text-[13px]">
+              {b.paymentId?.startsWith("pay_") && (
+                <li className="flex justify-between py-2"><span>Online payment · <span className="font-mono text-[11.5px]">{b.paymentId}</span></span><span className="tabular-nums">{rupees(b.depositInr || b.amountInr)}</span></li>
+              )}
+              {(b.payments ?? []).map((p) => (
+                <li key={p.id} className="flex justify-between gap-3 py-2">
+                  <span>
+                    {p.amountInr < 0 ? "Refund" : "Payment"} · {methodLabel(p.method)}
+                    <span className="block text-[12px] text-[var(--a-muted)]">{fmtStamp(p.createdAt)}{p.note ? ` · ${p.note}` : ""}</span>
+                  </span>
+                  <span className={`tabular-nums ${p.amountInr < 0 ? "text-rose-700" : ""}`}>{p.amountInr < 0 ? "−" : ""}{rupees(Math.abs(p.amountInr))}</span>
+                </li>
+              ))}
+              {!b.paymentId?.startsWith("pay_") && (b.payments ?? []).length === 0 && (
+                <li className="py-2 text-[var(--a-muted)]">{isPaid(b) ? "Marked paid at the hotel." : "No payments yet."}</li>
+              )}
+            </ul>
+            {b.status === "pending" && b.holdExpiresAt && <p className="mt-2 text-[12px] text-[var(--a-muted)]">Online hold expires {fmtStamp(b.holdExpiresAt)}</p>}
           </Section>
         )}
 
@@ -270,5 +301,117 @@ function GuestEditor({ b, onDone }: { b: AdminBooking; onDone: () => void }) {
         </Btn>
       </div>
     </div>
+  );
+}
+
+function PaymentForm({ b, checkout, onDone }: { b: AdminBooking; checkout: boolean; onDone: () => void }) {
+  const desk = useDesk();
+  const due = balanceDue(b);
+  const [kind, setKind] = useState<"payment" | "refund">("payment");
+  const [amount, setAmount] = useState(String(due || ""));
+  const [method, setMethod] = useState<string>("cash");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const value = Number(amount) || 0;
+  return (
+    <section className="rounded-2xl border-2 border-[#b48a3c]/40 bg-white p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <h4 className="text-[14px] font-semibold">{checkout ? "Settle and check out" : "Record money"}</h4>
+        {!checkout && (
+          <Segmented value={kind} onChange={(v) => { setKind(v); setAmount(v === "refund" ? String(Math.max(0, paidAmount(b) - (b.status === "cancelled" ? 0 : b.amountInr)) || "") : String(due || "")); }} options={[{ value: "payment", label: "Payment" }, { value: "refund", label: "Refund" }]} />
+        )}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Amount (₹)" hint={kind === "payment" ? (due > 0 ? `Balance due ${rupees(due)}` : "Nothing due") : `Received so far ${rupees(paidAmount(b))}`}>
+          <input className={inputCls} type="number" min={1} value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
+        </Field>
+        <Field label="Method">
+          <select className={inputCls} value={method} onChange={(e) => setMethod(e.target.value)}>
+            {METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+        </Field>
+        <div className="sm:col-span-2">
+          <Field label="Reference (optional)"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} placeholder="UPI ref, card last 4, receipt no.…" /></Field>
+        </div>
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <Btn size="sm" variant="ghost" onClick={onDone}>Close</Btn>
+        <Btn
+          size="sm"
+          variant={kind === "refund" ? "danger" : "primary"}
+          disabled={busy || value <= 0}
+          onClick={async () => {
+            setBusy(true);
+            const ok = await desk.patchBooking(b.id, { action: "add_payment", amountInr: kind === "refund" ? -value : value, method, note: note.trim() || undefined }, kind === "refund" ? `Refund of ${rupees(value)} recorded` : `${rupees(value)} received`);
+            if (ok && checkout) await desk.patchBooking(b.id, { action: "set_status", status: "checked_out" }, `${b.guestName} checked out`);
+            setBusy(false);
+            if (ok) onDone();
+          }}
+        >
+          {busy ? "Saving…" : kind === "refund" ? `Refund ${rupees(value)}` : checkout ? `Receive ${rupees(value)} & check out` : `Receive ${rupees(value)}`}
+        </Btn>
+      </div>
+    </section>
+  );
+}
+
+const REASONS = ["Guest cancelled", "Change of plans", "Booked elsewhere", "Duplicate booking", "Payment not received", "Hotel cancelled"];
+
+function CancelForm({ b, onDone }: { b: AdminBooking; onDone: () => void }) {
+  const desk = useDesk();
+  const received = paidAmount(b);
+  const [reason, setReason] = useState(REASONS[0]);
+  const [detail, setDetail] = useState("");
+  const [fee, setFee] = useState("0");
+  const [method, setMethod] = useState("cash");
+  const [busy, setBusy] = useState(false);
+  const refund = Math.max(0, received - (Number(fee) || 0));
+  return (
+    <section className="rounded-2xl border-2 border-rose-200 bg-white p-5">
+      <h4 className="mb-4 text-[14px] font-semibold text-rose-800">Cancel this booking</h4>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Reason">
+          <select className={inputCls} value={reason} onChange={(e) => setReason(e.target.value)}>
+            {REASONS.map((r) => <option key={r}>{r}</option>)}
+          </select>
+        </Field>
+        <Field label="Details (optional)"><input className={inputCls} value={detail} onChange={(e) => setDetail(e.target.value)} /></Field>
+        {received > 0 && (
+          <>
+            <Field label="Cancellation fee kept (₹)" hint={`Received so far ${rupees(received)}`}>
+              <input className={inputCls} type="number" min={0} max={received} value={fee} onChange={(e) => setFee(e.target.value)} />
+            </Field>
+            <Field label="Refund by">
+              <select className={inputCls} value={method} onChange={(e) => setMethod(e.target.value)}>
+                {METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </select>
+            </Field>
+          </>
+        )}
+      </div>
+      <p className="mt-3 text-[12.5px] text-[var(--a-muted)]">
+        The room goes back on sale straight away.{received > 0 ? ` Refund to record: ${rupees(refund)}.` : ""}
+      </p>
+      <div className="mt-4 flex justify-end gap-2">
+        <Btn size="sm" variant="ghost" onClick={onDone}>Keep booking</Btn>
+        <Btn
+          size="sm"
+          variant="danger"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            const ok = await desk.patchBooking(
+              b.id,
+              { action: "cancel_admin", reason: [reason, detail.trim()].filter(Boolean).join(" — "), refundInr: refund || undefined, refundMethod: method },
+              refund ? `Cancelled · refund ${rupees(refund)} recorded` : "Booking cancelled",
+            );
+            setBusy(false);
+            if (ok) onDone();
+          }}
+        >
+          {busy ? "Cancelling…" : refund ? `Cancel & refund ${rupees(refund)}` : "Cancel booking"}
+        </Btn>
+      </div>
+    </section>
   );
 }

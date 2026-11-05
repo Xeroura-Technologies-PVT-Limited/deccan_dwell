@@ -1812,6 +1812,7 @@ html.dd-has-cursor :is(input, textarea, select, [contenteditable="true"]) {
 .dd-sda [data-sda="frame"] { animation-name: dd-sda-frame; }
 .dd-sda [data-sda="photo"] { animation-name: dd-sda-photo; }
 .dd-sda [data-sda="palms"] { animation-name: dd-sda-palms; }
+.dd-sda [data-sda="hills"] { animation-name: dd-sda-hills; }
 .dd-sda [data-sda="side-l"] { animation-name: dd-sda-side-l; }
 .dd-sda [data-sda="side-r"] { animation-name: dd-sda-side-r; }
 .dd-sda [data-sda="title"] { animation-name: dd-sda-title, dd-sda-title-vis; }
@@ -1834,4 +1835,42 @@ html.dd-has-cursor :is(input, textarea, select, [contenteditable="true"]) {
 .dda-hatch {
   background-color: #ece8df;
   background-image: repeating-linear-gradient(135deg, rgba(22, 48, 42, 0.12) 0 2px, transparent 2px 7px);
+}
+
+/* Chamundi Hills on the right of the hero, under the palm. */
+.dd-hero-hills {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: min(58vw, 980px);
+  height: 46%;
+  background: url("/images/chamundi-hills.svg") bottom right / 100% 100% no-repeat;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 38%);
+  mask-image: linear-gradient(90deg, transparent 0%, #000 38%);
+  /* Far away and hazy: out of focus behind the palm. */
+  filter: blur(4px);
+  pointer-events: none;
+}
+.dd-hero-mist {
+  position: absolute;
+  inset: 34% -20% 18% 0;
+  background: radial-gradient(60% 50% at 30% 50%, rgba(197, 160, 89, 0.13), transparent 70%),
+    radial-gradient(50% 45% at 75% 60%, rgba(214, 196, 150, 0.09), transparent 70%);
+  filter: blur(10px);
+  animation: dd-mist-drift 26s ease-in-out infinite alternate;
+}
+@keyframes dd-mist-drift {
+  from { transform: translate3d(-6%, 0, 0); }
+  to { transform: translate3d(6%, -4%, 0); }
+}
+@media (max-width: 767px) {
+  .dd-hero-hills {
+    width: 100vw;
+    height: 30%;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 25%);
+    mask-image: linear-gradient(90deg, transparent 0%, #000 25%);
+  }
+}
+@media (hover: none), (max-width: 1023px), (prefers-reduced-motion: reduce) {
+  .dd-hero-mist { animation: none; }
 }

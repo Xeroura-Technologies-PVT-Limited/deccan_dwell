@@ -54,14 +54,56 @@ export function isSold(b: Booking) {
   return ["confirmed", "checked_in", "checked_out"].includes(b.status);
 }
 
+/** Money received so far: the front-desk ledger, plus online payments and legacy "paid" flags. */
+export function paidAmount(b: Booking) {
+  const ledger = b.payments ?? [];
+  let paid = ledger.reduce((n, p) => n + p.amountInr, 0);
+  if (b.paymentId?.startsWith("pay_")) paid += b.depositInr || b.amountInr;
+  else if (b.paymentMethod === "online" && b.status !== "pending" && ledger.length === 0 && !b.paymentId) paid = b.amountInr;
+  if (ledger.length === 0 && b.paymentId === "paid_at_hotel") paid = b.amountInr;
+  return paid;
+}
+
 export function isPaid(b: Booking) {
-  if (b.paymentId === "paid_at_hotel" || b.paymentId?.startsWith("pay_")) return true;
-  return b.paymentMethod === "online" && b.status !== "pending";
+  return b.amountInr > 0 && paidAmount(b) >= b.amountInr;
 }
 
 export function balanceDue(b: Booking) {
   if (isBlock(b) || !["confirmed", "checked_in", "checked_out"].includes(b.status)) return 0;
-  return isPaid(b) ? 0 : b.amountInr;
+  return Math.max(0, b.amountInr - paidAmount(b));
+}
+
+/** Money held for a cancelled / no-show booking that hasn't been refunded. */
+export function creditHeld(b: Booking) {
+  if (!["cancelled", "no_show", "expired"].includes(b.status)) return 0;
+  return Math.max(0, paidAmount(b));
+}
+
+export const METHODS = [
+  { value: "cash", label: "Cash" },
+  { value: "upi", label: "UPI" },
+  { value: "card", label: "Card" },
+  { value: "bank", label: "Bank transfer" },
+] as const;
+export const methodLabel = (m: string) => METHODS.find((x) => x.value === m)?.label ?? (m === "online" ? "Online" : "Other");
+
+/** Ready-to-send WhatsApp confirmation for phone and walk-in guests. */
+export function confirmationText(b: AdminBooking) {
+  const due = balanceDue(b);
+  const lines = [
+    `Hello ${b.guestName.split(/\s+/)[0]}, your stay at Deccan Dwell is confirmed.`,
+    ``,
+    `Booking no.: ${b.id.toUpperCase()}`,
+    `Room: ${b.roomName} · ${b.guests} guest${b.guests > 1 ? "s" : ""}`,
+    `Check-in: ${fmtDate(b.checkIn)} from 12:00 pm`,
+    `Check-out: ${fmtDate(b.checkOut)} by 11:30 am`,
+    `Total: ${rupees(b.amountInr)}${due > 0 ? ` · ${rupees(due)} payable at check-in` : " · fully paid"}`,
+    ``,
+    `Deccan Dwell, Chamundi Hills Main Road, JC Nagar, Mysuru`,
+    `https://maps.google.com/?q=Deccan+Dwell+Mysuru`,
+    `Questions? Call +91 9945 465 380.`,
+  ];
+  return lines.join("\n");
 }
 
 export function sourceOf(b: Booking) {
@@ -111,8 +153,9 @@ export function downloadCsv(name: string, rows: (string | number)[][]) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function whatsappHref(phone: string) {
+export function whatsappHref(phone: string, text?: string) {
   const digits = phone.replace(/\D/g, "");
   if (!digits) return "";
-  return `https://wa.me/${digits.length === 10 ? `91${digits}` : digits}`;
+  const base = `https://wa.me/${digits.length === 10 ? `91${digits}` : digits}`;
+  return text ? `${base}?text=${encodeURIComponent(text)}` : base;
 }

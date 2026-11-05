@@ -32,6 +32,9 @@ function toBooking(row: {
   createdAt: string;
   adminNote: string | null;
   userId: string | null;
+  cancelReason?: string | null;
+  cancelledAt?: string | null;
+  payments?: { id: string; amountInr: number; method: string; note: string | null; createdAt: string; createdBy: string | null }[];
 }): Booking {
   return {
     id: row.id,
@@ -52,6 +55,16 @@ function toBooking(row: {
     createdAt: row.createdAt,
     adminNote: row.adminNote ?? undefined,
     userId: row.userId ?? undefined,
+    cancelReason: row.cancelReason ?? undefined,
+    cancelledAt: row.cancelledAt ?? undefined,
+    payments: row.payments?.map((p) => ({
+      id: p.id,
+      amountInr: p.amountInr,
+      method: p.method,
+      note: p.note ?? undefined,
+      createdAt: p.createdAt,
+      createdBy: p.createdBy ?? undefined,
+    })),
   };
 }
 
@@ -622,29 +635,149 @@ export async function reviewBookingRequest(requestId: string, status: "approved"
   }
 }
 
-export async function markBookingPaid(bookingId: string) {
+/** Money already received for a booking, from the ledger (plus legacy flags). */
+function paidSoFar(booking: { amountInr: number; depositInr: number; paymentId: string | null; paymentMethod: string }, payments: { amountInr: number }[]) {
+  let paid = payments.reduce((n, p) => n + p.amountInr, 0);
+  if (booking.paymentId?.startsWith("pay_")) paid += booking.depositInr || booking.amountInr;
+  if (payments.length === 0 && booking.paymentId === "paid_at_hotel") paid = booking.amountInr;
+  return paid;
+}
+
+const withPayments = { roomType: true, payments: { orderBy: { createdAt: "asc" as const } } };
+
+async function syncPaidFlag(bookingId: string) {
+  const row = await prisma.booking.findUnique({ where: { id: bookingId }, include: withPayments });
+  if (!row) return null;
+  if (!row.paymentId?.startsWith("pay_")) {
+    const paid = paidSoFar(row, row.payments);
+    const flag = paid >= row.amountInr && row.amountInr > 0 ? "paid_at_hotel" : "at_hotel";
+    if (row.paymentId !== flag && row.payments.length > 0) {
+      await prisma.booking.update({ where: { id: bookingId }, data: { paymentId: flag } });
+      row.paymentId = flag;
+    }
+  }
+  return { ...toBooking(row), roomName: row.roomType.name };
+}
+
+/** Front desk: take (or refund, with a negative amount) money against a booking. */
+export async function addPayment(input: { bookingId: string; amountInr: number; method: string; note?: string; createdBy?: string }) {
+  const booking = await prisma.booking.findUnique({ where: { id: input.bookingId } });
+  if (!booking) return { ok: false as const, error: "Booking not found" };
+  if (!input.amountInr) return { ok: false as const, error: "Enter an amount" };
+  await prisma.payment.create({
+    data: {
+      id: newId("pm"),
+      bookingId: booking.id,
+      amountInr: Math.round(input.amountInr),
+      method: input.method,
+      note: input.note?.trim() || null,
+      createdAt: new Date().toISOString(),
+      createdBy: input.createdBy ?? null,
+    },
+  });
+  if (booking.status === "pending" && input.amountInr > 0) {
+    await prisma.booking.update({ where: { id: booking.id }, data: { status: "confirmed", holdExpiresAt: null } });
+  }
+  const updated = await syncPaidFlag(booking.id);
+  return updated ? { ok: true as const, booking: updated } : { ok: false as const, error: "Booking not found" };
+}
+
+/** Front desk: settle whatever is still owed in one go. */
+export async function markBookingPaid(bookingId: string, method = "cash", createdBy?: string) {
   await expireStaleHolds();
-  const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+  const booking = await prisma.booking.findUnique({ where: { id: bookingId }, include: { payments: true } });
   if (!booking) return { ok: false as const, error: "Booking not found" };
   if (booking.status === "cancelled" || booking.status === "expired") {
     return { ok: false as const, error: "Cannot mark this booking paid" };
   }
-  const updated = await prisma.booking.update({
+  const balance = booking.amountInr - paidSoFar(booking, booking.payments);
+  if (balance > 0) {
+    return addPayment({ bookingId, amountInr: balance, method, note: "Balance settled", createdBy });
+  }
+  await prisma.booking.update({
     where: { id: bookingId },
     data: {
       status: booking.status === "pending" ? "confirmed" : booking.status,
-      paymentId: booking.paymentId?.startsWith("pay_")
-        ? booking.paymentId
-        : "paid_at_hotel",
+      paymentId: booking.paymentId?.startsWith("pay_") ? booking.paymentId : "paid_at_hotel",
     },
   });
-  return { ok: true as const, booking: toBooking(updated) };
+  const updated = await syncPaidFlag(bookingId);
+  return updated ? { ok: true as const, booking: updated } : { ok: false as const, error: "Booking not found" };
+}
+
+/** Front desk cancellation with a reason and an optional refund. */
+export async function cancelBookingAdmin(input: { bookingId: string; reason?: string; refundInr?: number; refundMethod?: string; createdBy?: string }) {
+  const booking = await prisma.booking.findUnique({ where: { id: input.bookingId } });
+  if (!booking) return { ok: false as const, error: "Booking not found" };
+  if (["cancelled", "expired", "checked_out"].includes(booking.status)) {
+    return { ok: false as const, error: "This booking can't be cancelled" };
+  }
+  await prisma.booking.update({
+    where: { id: booking.id },
+    data: { status: "cancelled", cancelReason: input.reason?.trim().slice(0, 300) || null, cancelledAt: new Date().toISOString() },
+  });
+  if (input.refundInr && input.refundInr > 0) {
+    await prisma.payment.create({
+      data: {
+        id: newId("pm"),
+        bookingId: booking.id,
+        amountInr: -Math.round(input.refundInr),
+        method: input.refundMethod || "cash",
+        note: "Refund on cancellation",
+        createdAt: new Date().toISOString(),
+        createdBy: input.createdBy ?? null,
+      },
+    });
+  }
+  const updated = await syncPaidFlag(booking.id);
+  return updated ? { ok: true as const, booking: updated } : { ok: false as const, error: "Booking not found" };
+}
+
+/** Bring a cancelled or no-show booking back, if its nights are still free. */
+export async function reinstateBooking(bookingId: string) {
+  await expireStaleHolds();
+  const booking = await prisma.booking.findUnique({ where: { id: bookingId }, include: { roomType: true } });
+  if (!booking) return { ok: false as const, error: "Booking not found" };
+  if (!["cancelled", "no_show", "expired"].includes(booking.status)) {
+    return { ok: false as const, error: "Only cancelled bookings can be reinstated" };
+  }
+  const nights = stayNights(booking.checkIn, booking.checkOut);
+  const occupied = await prisma.bookingNight.findMany({
+    where: {
+      roomTypeId: booking.roomTypeId,
+      night: { in: nights },
+      bookingId: { not: booking.id },
+      booking: {
+        OR: [
+          { status: { in: OCCUPYING_STATUSES } },
+          { AND: [{ status: "pending" }, { holdExpiresAt: { gt: new Date().toISOString() } }] },
+        ],
+      },
+    },
+    select: { night: true },
+  });
+  const counts = new Map<string, number>();
+  for (const row of occupied) counts.set(row.night, (counts.get(row.night) ?? 0) + 1);
+  const full = nights.find((n) => (counts.get(n) ?? 0) >= booking.roomType.totalUnits);
+  if (full) return { ok: false as const, error: `${booking.roomType.name} is now full on ${full}` };
+  await prisma.booking.update({
+    where: { id: booking.id },
+    data: { status: "confirmed", cancelReason: null, cancelledAt: null, holdExpiresAt: null },
+  });
+  const updated = await syncPaidFlag(booking.id);
+  return updated ? { ok: true as const, booking: updated } : { ok: false as const, error: "Booking not found" };
+}
+
+/** One booking with its ledger, for the front-desk invoice. */
+export async function getAdminBooking(bookingId: string) {
+  const row = await prisma.booking.findUnique({ where: { id: bookingId }, include: withPayments });
+  return row ? { ...toBooking(row), roomName: row.roomType.name } : null;
 }
 
 export async function listAdminBookings() {
   await expireStaleHolds();
   const rows = await prisma.booking.findMany({
-    include: { roomType: true },
+    include: { roomType: true, payments: { orderBy: { createdAt: "asc" } } },
     orderBy: { createdAt: "desc" },
   });
   return rows.map((row) => ({
