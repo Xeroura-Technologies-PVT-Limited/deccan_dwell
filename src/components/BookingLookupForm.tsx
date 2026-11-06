@@ -2,10 +2,8 @@
 
 import { readJson } from "@/lib/http";
 import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 
 export function BookingLookupForm() {
-  const router = useRouter();
   const [bookingId, setBookingId] = useState("");
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +18,9 @@ export function BookingLookupForm() {
       const response = await fetch(`/api/bookings/lookup?${query}`);
       const data = await readJson(response);
       if (!response.ok) throw new Error(data.error || "Could not find booking");
-      router.push(`/booking/${data.booking.id}?email=${encodeURIComponent(email)}`);
+      // Full navigation: the receipt URL carries the email, and analytics
+      // must never see it as a client-side page change.
+      window.location.assign(`/booking/${data.booking.id}?email=${encodeURIComponent(email)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not find booking");
     } finally {

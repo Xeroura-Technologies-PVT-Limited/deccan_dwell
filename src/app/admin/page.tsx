@@ -6,7 +6,7 @@ import { AdminApp } from "@/components/admin/desk/AdminApp";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Front desk · Deccan Dwell",
+  title: "Front desk",
   robots: { index: false },
 };
 

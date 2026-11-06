@@ -1,6 +1,7 @@
 "use client";
 
 import { readJson } from "@/lib/http";
+import { track } from "@/lib/analytics";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AnimatePresence, animate, motion } from "framer-motion";
 import Link from "next/link";
@@ -276,6 +277,13 @@ export function BookingSection() {
           : " We will confirm by email once mail is connected."
       }`,
     );
+    track("purchase", {
+      transaction_id: data.booking.id,
+      value: data.booking.amountInr,
+      currency: "INR",
+      payment_type: "online",
+      items: [{ item_id: data.booking.roomTypeId, quantity: 1 }],
+    });
     window.location.href = `/booking/${data.booking.id}?email=${encodeURIComponent(guestEmail)}`;
   }
 
@@ -318,6 +326,12 @@ export function BookingSection() {
     }
     setStatus("loading");
     setMessage(null);
+    track("begin_checkout", {
+      currency: "INR",
+      value: total || undefined,
+      payment_type: paymentMethod,
+      items: [{ item_id: roomTypeId, quantity: 1 }],
+    });
     try {
       const res = await fetch("/api/bookings", {
         method: "POST",
@@ -341,6 +355,13 @@ export function BookingSection() {
         setBookingId(data.booking.id);
         setPayment(null);
         setStatus("paid");
+        track("purchase", {
+          transaction_id: data.booking.id,
+          value: data.booking.amountInr,
+          currency: "INR",
+          payment_type: "at_hotel",
+          items: [{ item_id: data.booking.roomTypeId, quantity: 1 }],
+        });
         window.location.assign(`/booking/${data.booking.id}?email=${encodeURIComponent(guestEmail)}`);
         return;
       }

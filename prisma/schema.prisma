@@ -107,3 +107,12 @@ model Payment {
   @@index([bookingId])
   @@index([createdAt])
 }
+
+/// Fixed-window request counters for login, sign-up, lookups and bookings.
+model RateLimit {
+  key     String   @id
+  count   Int
+  resetAt DateTime
+
+  @@index([resetAt])
+}

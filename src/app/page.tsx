@@ -11,6 +11,7 @@ import { WelcomeSection } from "@/components/site/WelcomeSection";
 import { MysuruSection } from "@/components/site/MysuruSection";
 import { Cursor } from "@/components/site/Cursor";
 import { Marquee } from "@/components/site/Marquee";
+import { HotelJsonLd } from "@/components/seo/HotelJsonLd";
 
 export default function Home() {
   return (
@@ -21,7 +22,9 @@ export default function Home() {
       <SmoothScroll />
       <Cursor />
       <SiteHeader />
+      <HotelJsonLd />
       <main>
+        <h1 className="sr-only">Deccan Dwell — rooms and family suites near Chamundi Hills, Mysuru</h1>
         <HeroPortal />
         <WelcomeSection />
         <RoomsSection />

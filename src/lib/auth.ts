@@ -41,7 +41,10 @@ export async function requireAdmin() {
 export async function setSessionCookie(user: SessionUser) {
   const token = await signSession(user);
   const jar = await cookies();
-  jar.set(SESSION_COOKIE, token, sessionCookieOptions);
+  jar.set(SESSION_COOKIE, token, {
+    ...sessionCookieOptions,
+    maxAge: user.role === "admin" ? 60 * 60 * 24 * 7 : sessionCookieOptions.maxAge,
+  });
 }
 
 export async function clearSessionCookie() {

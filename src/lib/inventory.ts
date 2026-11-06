@@ -788,15 +788,12 @@ export async function listAdminBookings() {
 
 export async function listGuestBookings(input: { userId?: string; email?: string }) {
   await expireStaleHolds();
-  const email = input.email?.trim().toLowerCase();
-  if (!input.userId && !email) return [];
+  // Only bookings made while signed in to this account. Matching on the
+  // email alone would expose stays to anyone who registers that address,
+  // since sign-up doesn't verify email yet.
+  if (!input.userId) return [];
   const rows = await prisma.booking.findMany({
-    where: {
-      OR: [
-        input.userId ? { userId: input.userId } : undefined,
-        email ? { guestEmail: email } : undefined,
-      ].filter(Boolean) as { userId?: string; guestEmail?: string }[],
-    },
+    where: { userId: input.userId },
     include: { roomType: true },
     orderBy: { createdAt: "desc" },
   });

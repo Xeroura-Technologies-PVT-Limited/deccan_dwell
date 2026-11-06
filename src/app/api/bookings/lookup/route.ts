@@ -2,15 +2,18 @@ import { apiError } from "@/lib/api-errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getBookingByIdAndEmail } from "@/lib/inventory";
+import { clientIp, hit, tooMany } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
 const lookupSchema = z.object({
   bookingId: z.string().min(5).max(40),
-  email: z.string().email(),
+  email: z.string().email().max(160),
 });
 
 async function handleGET(request: Request) {
+  const limit = await hit(`lookup:${clientIp(request)}`, 20, 15 * 60);
+  if (!limit.ok) return tooMany(limit.retryAfter);
   const { searchParams } = new URL(request.url);
   const parsed = lookupSchema.safeParse({
     bookingId: searchParams.get("bookingId"),

@@ -7,7 +7,7 @@ import { getBookingByIdAndEmail } from "@/lib/inventory";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Your booking · Deccan Dwell",
+  title: "Your booking",
   robots: { index: false },
 };
 

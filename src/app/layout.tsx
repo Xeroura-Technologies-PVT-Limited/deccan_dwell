@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Cormorant_Garamond, DM_Sans, Great_Vibes, Geist } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
+import { SITE_DESCRIPTION, SITE_TITLE, SITE_URL } from "@/lib/site";
+import { Analytics } from "@/components/seo/Analytics";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -31,9 +33,38 @@ const script = Great_Vibes({
 });
 
 export const metadata: Metadata = {
-  title: "Deccan Dwell · Mysuru",
-  description:
-    "Rooms and three-bedroom suites at the foothills of Chamundi Hills, Mysuru — a home away from home.",
+  metadataBase: new URL(SITE_URL),
+  title: { default: SITE_TITLE, template: "%s · Deccan Dwell" },
+  description: SITE_DESCRIPTION,
+  applicationName: "Deccan Dwell",
+  keywords: [
+    "Deccan Dwell",
+    "hotel in Mysuru",
+    "stay near Chamundi Hills",
+    "homestay Mysore",
+    "rooms near Mysore Palace",
+    "family suite Mysuru",
+    "3 BHK stay Mysore",
+  ],
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    siteName: "Deccan Dwell",
+    url: "/",
+    locale: "en_IN",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "Deccan Dwell, Mysuru — a home away from home" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: ["/og-image.jpg"],
+  },
+  robots: { index: true, follow: true, googleBot: { "max-image-preview": "large", "max-snippet": -1 } },
+  formatDetection: { telephone: true, address: true, email: true },
+  other: { "geo.region": "IN-KA", "geo.placename": "Mysuru" },
 };
 
 /**
@@ -58,6 +89,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body className="min-h-full">
         {children}
+        <Analytics />
       </body>
     </html>
   );

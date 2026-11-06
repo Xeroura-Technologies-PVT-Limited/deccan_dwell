@@ -4,6 +4,8 @@ import { getSession } from "@/lib/auth";
 import { listGuestBookings } from "@/lib/inventory";
 import { BookingsTable, SignOutButton } from "@/components/BookingsTable";
 
+export const metadata = { title: "Your stays", robots: { index: false, follow: true }, alternates: { canonical: null } };
+
 export const dynamic = "force-dynamic";
 
 export default async function AccountPage() {

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { BookingLookupForm } from "@/components/BookingLookupForm";
 
+export const metadata = { title: "Find your booking", robots: { index: false, follow: true }, alternates: { canonical: null } };
+
 export default function BookingLookupPage() {
   return (
     <main className="min-h-screen bg-[var(--dd-hero-base)] px-6 py-12 text-[var(--dd-cream)] md:px-10 lg:px-14">

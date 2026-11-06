@@ -7,7 +7,7 @@ import { PrintButton } from "@/components/admin/desk/PrintButton";
 import { fmtDate, fmtStamp, methodLabel, nightsOf, paidAmount, rupees } from "@/components/admin/desk/lib";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Invoice · Deccan Dwell", robots: { index: false } };
+export const metadata = { title: "Invoice", robots: { index: false } };
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "On hold",

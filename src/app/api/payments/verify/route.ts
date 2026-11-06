@@ -8,7 +8,7 @@ import { sendBookingConfirmation } from "@/lib/email";
 export const runtime = "nodejs";
 
 const schema = z.object({
-  bookingId: z.string(),
+  bookingId: z.string().max(40),
   razorpay_order_id: z.string().min(3),
   razorpay_payment_id: z.string().min(3),
   razorpay_signature: z.string().min(8),
@@ -25,10 +25,9 @@ async function handlePOST(request: Request) {
   if (!booking) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
-  if (
-    booking.razorpayOrderId &&
-    booking.razorpayOrderId !== parsed.data.razorpay_order_id
-  ) {
+  // The order must be the one this server created for this booking; a valid
+  // signature for some other (cheaper) order must not confirm this stay.
+  if (!booking.razorpayOrderId || booking.razorpayOrderId !== parsed.data.razorpay_order_id) {
     return NextResponse.json({ error: "Order does not match this stay" }, { status: 409 });
   }
 

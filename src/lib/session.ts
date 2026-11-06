@@ -30,7 +30,8 @@ export async function signSession(user: SessionUser) {
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.id)
     .setIssuedAt()
-    .setExpirationTime("30d")
+    // Front-desk sessions are shorter-lived than guest ones.
+    .setExpirationTime(user.role === "admin" ? "7d" : "30d")
     .sign(secret());
 }
 

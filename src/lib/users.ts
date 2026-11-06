@@ -32,10 +32,9 @@ export async function registerGuest(input: {
     },
   });
 
-  await prisma.booking.updateMany({
-    where: { guestEmail: email, userId: null },
-    data: { userId: user.id },
-  });
+  // Earlier guest bookings with this email are NOT attached automatically:
+  // sign-up doesn't verify the email yet, so anyone could register someone
+  // else's address and see their stays. Those guests use "Find my booking".
 
   return {
     ok: true,
@@ -75,7 +74,12 @@ export async function ensureAdminUser() {
   const email = normalizeEmail(
     process.env.ADMIN_EMAIL || "decan.dwell@gmail.com",
   );
-  const password = process.env.ADMIN_PASSWORD || "DeccanAdmin1";
+  // No built-in fallback password: a default that ships in the code is a
+  // password anyone reading the repo knows.
+  const password = process.env.ADMIN_PASSWORD;
+  if (!password || password.length < 12) {
+    throw new Error("Set ADMIN_PASSWORD (12+ characters) in .env before seeding the admin user");
+  }
   const existing = await prisma.user.findUnique({ where: { email } });
   const passwordHash = await bcrypt.hash(password, 10);
   if (existing) {

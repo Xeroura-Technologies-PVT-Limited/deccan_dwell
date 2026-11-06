@@ -13,18 +13,19 @@ import {
   razorpayKeyId,
 } from "@/lib/razorpay";
 import { getSession } from "@/lib/auth";
+import { clientIp, hit, tooMany } from "@/lib/rate-limit";
 import { sendBookingConfirmation } from "@/lib/email";
 
 export const runtime = "nodejs";
 
 const createSchema = z.object({
-  roomTypeId: z.string(),
+  roomTypeId: z.string().max(40),
   checkIn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   checkOut: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   guests: z.number().int().min(1).max(6),
-  guestName: z.string().min(2),
-  guestEmail: z.string().email(),
-  guestPhone: z.string().min(8),
+  guestName: z.string().trim().min(2).max(80),
+  guestEmail: z.string().email().max(160),
+  guestPhone: z.string().trim().min(8).max(20),
   paymentMethod: z.enum(["online", "at_hotel"]).default("online"),
 });
 
@@ -36,6 +37,15 @@ async function handlePOST(request: Request) {
   }
 
   const payAtHotel = parsed.data.paymentMethod === "at_hotel";
+  // Pay-at-hotel reservations hold a room with no money down, so they get a
+  // tighter limit than online checkouts (which expire after 15 minutes).
+  const ip = clientIp(request);
+  const limit = payAtHotel
+    ? await hit(`book-hotel:${ip}`, 4, 60 * 60)
+    : await hit(`book-online:${ip}`, 15, 60 * 60);
+  if (!limit.ok) {
+    return tooMany(limit.retryAfter, "Too many reservations from this connection. Please call us on +91 9945 465 380 and we'll help you book.");
+  }
 
   if (!payAtHotel && !razorpayConfigured()) {
     return NextResponse.json(
@@ -92,14 +102,10 @@ async function handlePOST(request: Request) {
       },
     });
   } catch (err) {
+    console.error("[razorpay order]", err);
     await cancelBooking(result.booking.id);
     return NextResponse.json(
-      {
-        error:
-          err instanceof Error
-            ? err.message
-            : "Could not start Razorpay checkout",
-      },
+      { error: "We couldn't start the online payment. Please try again, or choose Pay at hotel." },
       { status: 502 },
     );
   }

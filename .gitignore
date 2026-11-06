@@ -62,3 +62,10 @@ push.sh
 Claude outputs/
 netinfo.sh
 .devip
+audit.sh
+.audit.json
+.audit.txt
+audit.log
+.package.json.bak
+.package-lock.json.bak
+restart-dev.sh
