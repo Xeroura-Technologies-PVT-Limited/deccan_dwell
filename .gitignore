@@ -69,3 +69,5 @@ audit.log
 .package.json.bak
 .package-lock.json.bak
 restart-dev.sh
+add-admin.sh
+add-admin.log

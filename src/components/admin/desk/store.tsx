@@ -63,6 +63,9 @@ export function DeskProvider({ initialBookings, children }: { initialBookings: A
   const [muted, setMutedState] = useState(false);
   const mutedRef = useRef(false);
   const noticed = useRef<Set<string> | null>(null);
+  /** Newest createdAt in the last full download; the ping asks "anything after this?". */
+  const cursor = useRef<string | null>(null);
+  const syncing = useRef(false);
 
   /** Turn fresh data into notifications: new website bookings and guest requests. */
   const collect = useCallback((list: AdminBooking[], reqs: AdminRequest[]) => {
@@ -117,6 +120,10 @@ export function DeskProvider({ initialBookings, children }: { initialBookings: A
       if (q.requests) setRequests(q.requests);
       if (b.bookings && q.requests) {
         collect(b.bookings, q.requests);
+        // Only advance the cursor after a complete download, so a failed
+        // load is retried on the next ping instead of being skipped.
+        const newest = [...b.bookings.map((x) => x.createdAt), ...q.requests.map((x) => x.createdAt)].sort().pop();
+        cursor.current = newest ?? "1970-01-01T00:00:00.000Z";
       }
       const err = b.error || r.error || q.error;
       if (err) toast(err, "error");
@@ -125,11 +132,39 @@ export function DeskProvider({ initialBookings, children }: { initialBookings: A
     }
   }, [toast, collect]);
 
+  /**
+   * The 20-second check while the desk sits open at reception. It asks the
+   * server a tiny question ("any new website bookings or guest requests since
+   * my newest one?") and only downloads the full lists — then chimes — when
+   * the answer is yes. Saves database egress as the booking history grows.
+   */
+  const poll = useCallback(async () => {
+    if (syncing.current) return;
+    syncing.current = true;
+    try {
+      if (!cursor.current) {
+        await refresh();
+        return;
+      }
+      const res = await fetch(`/api/admin/desk/ping?since=${encodeURIComponent(cursor.current)}`, { cache: "no-store" });
+      if (res.status === 401) {
+        window.location.assign("/admin/login");
+        return;
+      }
+      if (!res.ok) return; // try again on the next tick
+      const ping = await readJson<{ hasNew?: boolean }>(res);
+      if (ping.hasNew) await refresh();
+    } catch {
+      /* offline for a moment — next tick retries */
+    } finally {
+      syncing.current = false;
+    }
+  }, [refresh]);
+
   useEffect(() => {
-    const t = window.setTimeout(() => void refresh(), 0);
-    // Keep the desk current while it is left open at reception.
+    const t = window.setTimeout(() => void poll(), 0);
     // Check for new bookings every 20 seconds (background tabs slow this to about once a minute).
-    const i = window.setInterval(() => void refresh(), 20_000);
+    const i = window.setInterval(() => void poll(), 20_000);
     const unlock = () => primeAudio();
     window.addEventListener("pointerdown", unlock, { once: true });
     return () => {
@@ -137,7 +172,7 @@ export function DeskProvider({ initialBookings, children }: { initialBookings: A
       window.clearInterval(i);
       window.removeEventListener("pointerdown", unlock);
     };
-  }, [refresh]);
+  }, [poll]);
 
   const unread = notices.filter((n) => !n.read).length;
   useEffect(() => {
